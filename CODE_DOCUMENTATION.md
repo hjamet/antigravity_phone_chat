@@ -63,7 +63,7 @@ graph TD
 | `remoteScroll()` | Syncs phone scroll position to Desktop Antigravity chat. |
 | `getAppState()` | Syncs Mode/Model status and detects history visibility. |
 | `startNewChat()` | Triggers the "New Chat" action on Desktop. |
-| `getChatHistory()` | Scrapes the Antigravity history panel for active/past conversations. |
+| `getChatHistory()` | Strictly scopes the DOM to the "Select a conversation" pop-up container, accurately scraping chat history titles while filtering out background agent logs and filenames. |
 | `selectChat()` | Switches the desktop session to a specific conversation title. |
 | `hasChatOpen()` | Verifies if the editor and chat container are currently rendered. |
 | `gracefulShutdown()` | Handles SIGINT/SIGTERM for clean server shutdown. |

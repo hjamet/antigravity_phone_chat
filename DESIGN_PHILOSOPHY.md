@@ -8,8 +8,8 @@ Antigravity Phone Connect isn't a replacement for the desktop IDE; it's a **wire
 
 ## Design Principles
 
-### 1. Robustness Over Precision
-Selecting elements in a dynamically changing IDE like Antigravity is brittle. This project prioritizes **Text-Based Selection** and **Fuzzy Matching**. Instead of looking for `.button-32x`, we look for an element that *looks like a button* and *contains the word "Gemini"*.
+### 1. Robustness Over Precision (With Boundaries)
+Selecting elements in a dynamically changing IDE like Antigravity is brittle. This project prioritizes **Text-Based Selection** and **Fuzzy Matching**. Instead of looking for `.button-32x`, we look for an element that *looks like a button* and *contains the word "Gemini"*. However, when parsing complex data arrays (like chat history), we implement **Strict Scoped Boundaries** (locking onto specific modal containers) to filter out background visual noise (e.g., agent thought logs or source filenames).
 
 ### 2. Zero-Impact Mirroring
 The snapshot system clones the DOM before capturing. This ensures that the mirroring process doesn't interfere with the developer's cursor, scroll position, or focus on the Desktop machine.

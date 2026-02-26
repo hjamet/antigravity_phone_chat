@@ -4,6 +4,28 @@ All notable changes to **Antigravity Phone Connect** are documented here, in rev
 
 ---
 
+## v0.2.24 - Deterministic Targeting & Security Hardening 🎯
+**Release Date:** February 26, 2026
+
+---
+
+### 🚀 New Features & Precision Controls
+- **Deterministic Targeting Engine**: Completely solved the "Duplicate Element Mismatch" issue. Interactive elements like "Run", "Reject", and "Thought" toggles now use dynamic occurrence index tracking to ensure your tap hits the exact message you intended, even in long chat histories with many identical buttons.
+- **Leaf-Most Filtering**: Introduced a "Zero-Proxy Filter" on the server. The system now automatically identifies and targets the inner-most interactive node, preventing "Nested DOM Traps" where clicks would land on parent containers instead of the actual button.
+- **Strict Scoped Clicking**: CDP clicks are now prioritized within the active chat cascade (`#conversation`, `#cascade`), ensuring that historical buttons are matched with 100% precision while ignoring unrelated sidebar controls.
+- **Enhanced Thought Matching**: Thought toggles now use strict first-line text matching (e.g., "Thought for 2s") to reliably distinguish between multiple reasoning blocks in a single session.
+
+### 🛡️ Security & Infrastructure
+- **Security Secret Externalization**: Removed hardcoded secrets for signed cookies and authentication salts. All sensitive security tokens can now be customized via `.env` to invalidate sessions or harden the server.
+- **Full Security Audit**: Conducted a formal security sweep (OWASP scope) and documented the results in `SECURITY.md`. Confirmed robust protection against XSS and CDP injection.
+- **Enhanced .env Template**: Updated `.env.example` with new optional security parameters for advanced users.
+
+### 📚 Documentation
+- **Technical Deep-Dive**: Updated `CODE_DOCUMENTATION.md` with details on the new Dual-Pass targeting architecture and Leaf-Node isolation logic.
+- **Ideological Alignment**: Refined `DESIGN_PHILOSOPHY.md` to reflect the move toward "Robustness with Zero-Proxy Precision."
+
+---
+
 ## v0.2.21 - Deep Integration & Visual Fidelity 🚀
 **Release Date:** February 26, 2026
 

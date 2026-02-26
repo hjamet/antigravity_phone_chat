@@ -1,3 +1,69 @@
+# Social Media Posts for v0.2.24
+
+---
+
+## LinkedIn Post
+
+Remote control just became 100% deterministic! 🎯🚀
+
+I've just released v0.2.24 of Antigravity Phone Connect, and it’s our most precise update yet. If you've ever struggled with misclicks or "sync-fighting" between your phone and desktop IDE, this is for you.
+
+What’s under the hood:
+✅ **Deterministic Targeting Engine** — We’ve completely solved the "Duplicate Element" problem. Whether you have 1 or 10 "Run" buttons in your history, your tap now hits the exact one you intended. 🎯
+✅ **Leaf-Most filtering** — Our new "Zero-Proxy Filter" identifies the precise inner node of any button, ending the "Nested DOM Trap" forever. 🖱️
+✅ **Security Purity** — Hardcoded secrets are gone! All sensitive tokens (Session Secret, Auth Salt) are now fully externalized for better audit scores. 🛡️
+✅ **Paranoid Mode Audit** — Conducted a full OWASP-scope security sweep and logged the results in our new `SECURITY.md`. 🟢
+
+Antigravity Phone Connect remains open-source and dedicated to keeping you productive away from your desk.
+
+🔗 Repo: https://github.com/krishnakanthb13/antigravity_phone_chat
+
+#OpenSource #AI #DevTools #Automation #Security #Antigravity #Efficiency
+
+---
+
+## Reddit Post
+
+**Suggested Sub-Reddits:** r/programming, r/webdev, r/SideProject, r/opensource
+**Title:** [Showcase] Antigravity Phone Connect v0.2.24 — Deterministic Remote Clicks and Security Hardening!
+
+Hey everyone! 👋 
+
+I'm back with v0.2.24 of **Antigravity Phone Connect**, my open-source tool that lets you monitor and control your desktop AI sessions from your phone. 📱🚀
+
+This update focuses on **Interaction Integrity** and **Security**:
+
+🎯 **Zero-Miss Clicks**: One of the biggest pain points was clicking identical buttons in long chat histories. We now use **Occurrence Index Tracking** to uniquely identify every single button, so your tap on the 5th "Run" button in the history actually triggers the 5th command on your PC.
+
+🖱️ **Leaf-Most Filtering**: DOM trees can be messy. We implemented a "Zero-Proxy Filter" that automatically pierces through nested containers to target the inner-most interactive node, ensuring clicks are 100% reliable.
+
+🛡️ **Security Hardening**: Fixed the "Security Purist" complaints by externalizing all hardcoded session secrets and auth salts. We also conducted a formal security sweep and added a formal `SECURITY.md` audit log.
+
+📜 **Better Thought Matching**: Expanding/collapsing AI reasoning blocks is now more robust with strict first-line text matching.
+
+If you enjoy keeping an eye on your AI's multi-minute thought processes while grabbing a coffee, check it out!
+
+Repo: https://github.com/krishnakanthb13/antigravity_phone_chat
+
+---
+
+## X (Twitter) Post
+
+Antigravity Phone Connect v0.2.24 is out! 📱🎯
+
+We didn't just fix clicks; we made them deterministic.
+
+✅ 0-Miss targeting with Index Tracking 🎯
+✅ "Zero-Proxy Filter" for nested buttons 🖱️
+✅ Hardcoded secrets externalized 🛡️
+✅ Formal OWASP security audit 🟢
+
+Remote control has never been this precise. 🚀
+
+https://github.com/krishnakanthb13/antigravity_phone_chat
+
+---
+
 # Social Media Posts for v0.2.21
 
 ---

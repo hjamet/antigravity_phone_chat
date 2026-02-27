@@ -152,7 +152,7 @@ Since macOS requires Automator for context menu entries, follow these steps manu
 - **Glassmorphism UI (NEW!)**: Sleek and modern quick-action and settings menus featuring a beautiful glassmorphism effect for enhanced mobile usability.
 - **🌙 Improved Dark Mode (NEW!)**: Enhanced UI styling and state capture designed to provide maximum clarity and correct model detection in dark mode.
 - **🧠 Latest AI Models**: Automatically updated support for the latest model versions from Gemini, Claude, and OpenAI.
-- **📜 Smart Chat History (NEW!)**: Full-screen history management with intelligent, strictly-scoped scraping. Safely extracts past conversations from the Antigravity pop-up while explicitly filtering out background noise like AI thought logs or filenames.
+- **📜 Premium Chat History (NEW!)**: Full-screen history management with a completely redesigned, sleek card-based UI. Features modern loading states, gorgeous gradients, and intelligent strictly-scoped scraping to safely extract past conversations without background noise.
 - **➕ One-Tap New Chat (NEW!)**: Start a fresh conversation instantly from your phone without needing to touch your desktop.
 - **🖼️ Context Menu Icons (NEW!)**: Visual icons in the right-click menu for better navigation.
 - **🌍 Global Web Access**: Secure remote access via ngrok tunnel. Access your AI from mobile data with passcode protection.

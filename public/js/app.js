@@ -21,6 +21,14 @@ const modelText = document.getElementById('modelText');
 const historyLayer = document.getElementById('historyLayer');
 const historyList = document.getElementById('historyList');
 
+// Project Selector Elements
+const projectSelectorBtn = document.getElementById('projectSelectorBtn');
+const projectsLayer = document.getElementById('projectsLayer');
+const projectsList = document.getElementById('projectsList');
+const projectSearchField = document.getElementById('projectSearchField');
+const currentProjectName = document.getElementById('currentProjectName');
+const currentProjectStatus = document.getElementById('currentProjectStatus');
+
 // --- State ---
 let autoRefreshEnabled = true;
 let userIsScrolling = false;
@@ -139,6 +147,7 @@ function connectWebSocket() {
         console.log('WS Connected');
         updateStatus(true);
         loadSnapshot();
+        fetchProjectsBackground(); // Try fetching projects when connected
     };
 
     ws.onmessage = (event) => {
@@ -645,6 +654,159 @@ async function sendMessage() {
     }
 }
 
+// --- Project Management Logic ---
+let cachedProjects = [];
+
+async function fetchProjectsBackground() {
+    try {
+        currentProjectStatus.textContent = 'Connecting...';
+        const res = await fetchWithAuth('/api/projects');
+        const projects = await res.json();
+        
+        if (projects && projects.length > 0) {
+            cachedProjects = projects;
+            currentProjectStatus.textContent = 'Connected';
+            // We can guess the current project is probably the first one (most recent)
+            // But we don't strictly know until we check the title, so we just say "Connected"
+        } else {
+            currentProjectStatus.textContent = 'Agent Manager Not Found';
+        }
+    } catch (e) {
+        currentProjectStatus.textContent = 'Disconnected';
+        console.error('Failed to background fetch projects:', e);
+    }
+}
+
+function renderProjects(filterText = '') {
+    if (!cachedProjects || cachedProjects.length === 0) {
+        projectsList.innerHTML = `
+            <div class="empty-state" style="padding: 40px 20px;">
+                <p>No workspaces found or Agent Manager is not open.</p>
+                <button class="empty-state-btn" onclick="fetchProjectsBackground(); setTimeout(()=>renderProjects(), 1000);" style="margin-top:20px;">Retry</button>
+            </div>
+        `;
+        return;
+    }
+
+    const filtered = filterText 
+        ? cachedProjects.filter(p => p.name.toLowerCase().includes(filterText.toLowerCase()) || p.path.toLowerCase().includes(filterText.toLowerCase()))
+        : cachedProjects;
+
+    if (filtered.length === 0) {
+        projectsList.innerHTML = `<div style="text-align:center; padding: 20px; color: var(--text-muted);">No workspaces match "${filterText}"</div>`;
+        return;
+    }
+
+    let html = '<div class="history-list-group">';
+    filtered.forEach(proj => {
+        // Extract a short monogram from the name
+        const mono = proj.name.substring(0, 2).toUpperCase();
+        
+        html += `
+            <div class="project-card" onclick="openProjectByIndex(${proj.index}, '${proj.name.replace(/'/g, "\\'")}')">
+                <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+                    <div class="history-card-icon" style="flex-shrink: 0; display:flex; align-items:center; justify-content:center; font-weight:bold; color:var(--accent); font-size:14px;">
+                        ${mono}
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div class="project-card-title truncate" style="white-space: nowrap; overflow:hidden; text-overflow:ellipsis;">${proj.name}</div>
+                        <div class="project-card-path truncate" style="white-space: nowrap; overflow:hidden; text-overflow:ellipsis; opacity:0.6;">${proj.path}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    
+    projectsList.innerHTML = html;
+}
+
+async function showProjects() {
+    projectsLayer.classList.add('show');
+    
+    // Show spinner initially if we have no cache
+    if (cachedProjects.length === 0) {
+        projectsList.innerHTML = `
+            <div class="history-state-container">
+                <div class="history-spinner"></div>
+                <div class="history-state-text">Loading Workspaces...</div>
+            </div>
+        `;
+    } else {
+        renderProjects();
+    }
+    
+    try {
+        const res = await fetchWithAuth('/api/projects');
+        const projects = await res.json();
+        if (projects && !projects.error) {
+            cachedProjects = projects;
+            currentProjectStatus.textContent = 'Connected';
+            renderProjects(projectSearchField.value);
+        } else {
+            projectsList.innerHTML = `<div style="text-align:center; padding: 20px; color: var(--error);">Error: ${projects.error || "Could not reach Agent Manager"}</div>`;
+        }
+    } catch (e) {
+        projectsList.innerHTML = `<div style="text-align:center; padding: 20px; color: var(--error);">Connection failed</div>`;
+        console.error('Project fetch error:', e);
+    }
+}
+
+function hideProjects() {
+    projectsLayer.classList.remove('show');
+}
+
+async function openProjectByIndex(index, name) {
+    // Optimistic UI updates
+    hideProjects();
+    currentProjectName.textContent = name;
+    currentProjectStatus.textContent = "Switching...";
+    statusText.textContent = 'Reconnecting';
+    statusDot.classList.remove('connected');
+    statusDot.classList.add('disconnected');
+    
+    chatContent.innerHTML = `
+        <div class="loading-state">
+            <div class="loading-spinner"></div>
+            <p>Loading Workspace...</p>
+        </div>
+    `;
+
+    try {
+        const res = await fetchWithAuth('/api/projects/open', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ index, name })
+        });
+        
+        // Workbench will disconnect and reconnect on the backend.
+        // We just let the websocket polling handle the recovery.
+        // It will fetch the new snapshot automatically when ready.
+    } catch (e) {
+        console.error('Error opening project:', e);
+        currentProjectStatus.textContent = 'Error';
+    }
+}
+
+async function openNewWorkspace() {
+    try {
+        hideProjects();
+        await fetchWithAuth('/api/workspace/open', { method: 'POST' });
+        // The dialog is opened on the computer. Antigravity UI might prompt standard OS folder selector.
+    } catch(e) {
+        console.error('Error triggering new workspace:', e);
+    }
+}
+
+// Attach listener to search field
+projectSearchField.addEventListener('input', (e) => {
+    renderProjects(e.target.value);
+});
+
+// Selector toggle
+projectSelectorBtn.addEventListener('click', showProjects);
+
+
 // --- Event Listeners ---
 sendBtn.addEventListener('click', sendMessage);
 
@@ -729,14 +891,6 @@ scrollToBottomBtn.addEventListener('click', () => {
     userScrollLockUntil = 0; // Clear lock so auto-scroll works again
     scrollToBottom();
 });
-
-// --- Quick Actions ---
-function quickAction(text) {
-    messageInput.value = text;
-    messageInput.style.height = 'auto';
-    messageInput.style.height = messageInput.scrollHeight + 'px';
-    messageInput.focus();
-}
 
 // --- Stop Logic ---
 stopBtn.addEventListener('click', async () => {

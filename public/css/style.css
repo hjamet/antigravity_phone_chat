@@ -80,6 +80,61 @@ body {
     gap: 16px;
 }
 
+/* Project Selector Zone inside Header */
+.project-selector {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 8px 12px;
+    margin-top: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.project-selector:active {
+    background: rgba(255, 255, 255, 0.08);
+    transform: scale(0.98);
+}
+
+.project-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+}
+
+.project-icon {
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.project-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+}
+
+.project-status {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: rgba(0, 0, 0, 0.2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 4px;
+    flex-shrink: 0;
+}
+
+.chevron-down {
+    color: var(--text-muted);
+}
+
 .stop-btn {
     background: #ef4444;
     color: #fff;
@@ -318,50 +373,6 @@ body {
     to {
         transform: rotate(360deg);
     }
-}
-
-/* Quick Actions Bar */
-.quick-actions {
-    display: flex;
-    gap: 10px;
-    padding: 12px 16px;
-    overflow-x: auto;
-    background: transparent;
-    /* Hide scrollbar for cleaner look */
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-
-.quick-actions::-webkit-scrollbar {
-    display: none;
-}
-
-.action-chip {
-    background: rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: var(--text-main);
-    padding: 8px 18px;
-    border-radius: 24px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.action-chip:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.action-chip:active {
-    transform: scale(0.96);
-    background: rgba(255, 255, 255, 0.1);
 }
 
 /* Input Section */
@@ -791,6 +802,37 @@ textarea::-webkit-scrollbar {
     background: var(--bg-input);
     transform: scale(0.96);
     border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* --- Project List Specific Styles --- */
+.project-card {
+    background: var(--bg-panel);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.project-card:active {
+    background: var(--bg-input);
+    transform: scale(0.98);
+}
+
+.project-card-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-main);
+}
+
+.project-card-path {
+    font-size: 12px;
+    color: var(--text-muted);
+    word-break: break-all;
 }
 
 .history-card-icon {

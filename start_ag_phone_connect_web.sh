@@ -11,7 +11,7 @@ echo
 # 0. Aggressive Cleanup
 echo "[0/2] Cleaning up orphans..."
 pkill -f "node server.js" &> /dev/null
-pkill -f "ngrok" &> /dev/null
+pkill -f "cloudflared" &> /dev/null
 # Cleanup by port (Linux/Mac)
 if command -v lsof &> /dev/null; then
     lsof -ti:3000 | xargs kill -9 &> /dev/null
@@ -35,7 +35,14 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# 4. Check for .env file
+# 4. Check cloudflared
+if ! command -v cloudflared &> /dev/null; then
+    echo "[ERROR] cloudflared is not installed."
+    echo "   Install from: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+    exit 1
+fi
+
+# 5. Check for .env file
 if [ ! -f ".env" ]; then
     echo "[WARNING] .env file not found. This is required for Web Access."
     echo
@@ -43,7 +50,7 @@ if [ ! -f ".env" ]; then
         echo "[INFO] Creating .env from .env.example..."
         cp .env.example .env
         echo "[SUCCESS] .env created from template!"
-        echo "[ACTION] Please open .env and update it with your configuration (e.g., NGROK_AUTHTOKEN)."
+        echo "[ACTION] Please open .env and update it with your Cloudflare Tunnel ID and public URL."
         exit 0
     else
         echo "[ERROR] .env.example not found. Cannot create .env template."
@@ -52,10 +59,10 @@ if [ ! -f ".env" ]; then
 fi
 echo "[INFO] .env configuration found."
 
-# 5. Launch everything via Python
+# 6. Launch everything via Python
 echo "[1/1] Launching Antigravity Phone Connect..."
-echo "(This will start both the server and the web tunnel)"
+echo "(This will start both the server and the Cloudflare tunnel)"
 python3 launcher.py --mode web
 
-# 6. Auto-close when done
+# 7. Auto-close when done
 exit 0

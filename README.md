@@ -67,21 +67,21 @@ The script will:
 
 ## 🌍 NEW: Global Remote Access (Web Mode)
 
-Access your Antigravity session from **anywhere in the world** (Mobile Data, outside Wi-Fi) with secure passcode protection.
+Access your Antigravity session from **anywhere in the world** (Mobile Data, outside Wi-Fi) with secure passcode protection, powered by **Cloudflare Tunnel**.
 
 ### Setup (First Time)
-1. **Get an ngrok Token**: Sign up for free at [ngrok.com](https://ngrok.com) and get your "Authtoken".
-2. **Automatic Configuration (Recommended)**: Simply run any launcher script. They will detect if `.env` is missing and automatically create it using `.env.example` as a template.
-3. **Manual Setup**: Alternatively, copy `.env.example` to `.env` manually and update the values:
+1. **Install cloudflared**: Download from the [Cloudflare Tunnel downloads page](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
+2. **Create a Tunnel**: Follow the [Cloudflare Tunnel guide](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) to create a named tunnel pointing to `http://localhost:3000`.
+3. **Configure `.env`**: Copy `.env.example` to `.env` and fill in your details:
    ```bash
    copy .env.example .env   # Windows
    cp .env.example .env     # Mac/Linux
    ```
-   Update the `.env` file with your details:
+   Update the `.env` file:
    ```env
-   NGROK_AUTHTOKEN=your_token_here
+   CLOUDFLARE_TUNNEL_ID=your-tunnel-id
+   TUNNEL_PUBLIC_URL=https://your-domain.example.com
    APP_PASSWORD=your_secure_passcode
-   XXX_API_KEY=your-ai-provider-key
    PORT=3000
    ```
 
@@ -89,12 +89,12 @@ Access your Antigravity session from **anywhere in the world** (Mobile Data, out
 - **Windows**: Run `start_ag_phone_connect_web.bat`
 - **Mac/Linux**: Run `./start_ag_phone_connect_web.sh`
 
-The script will launch the server and provide a **Public URL** (e.g., `https://abcd-123.ngrok-free.app`). 
+The script will launch the server and start the Cloudflare tunnel, providing your **stable public URL**.
 
 **Two Ways to Connect:**
 1. **Magic Link (Easiest)**: Scan the **Magic QR Code** displayed in the terminal. It logs you in automatically!
 2. **Manual**: 
-   - Open the URL on your phone.
+   - Open your configured domain URL on your phone.
    - Enter your `APP_PASSWORD` to log in.
 
 > 💡 **Tip:** Devices on the same local Wi-Fi still enjoy direct access without needing a password.
@@ -174,7 +174,7 @@ This tool is designed with a **"Local-First"** security model.
 - **📜 Premium Chat History (NEW!)**: Full-screen history management with a completely redesigned, sleek card-based UI. Features modern loading states, gorgeous gradients, and intelligent strictly-scoped scraping to safely extract past conversations without background noise. Dismissing the history view automatically triggers a remote Escape sequence on the desktop to keep your workspace clean.
 - **➕ One-Tap New Chat (NEW!)**: Start a fresh conversation instantly from your phone without needing to touch your desktop.
 - **🖼️ Context Menu Icons (NEW!)**: Visual icons in the right-click menu for better navigation.
-- **🌍 Global Web Access**: Secure remote access via ngrok tunnel. Access your AI from mobile data with passcode protection.
+- **🌍 Global Web Access**: Secure remote access via Cloudflare Tunnel. Access your AI from mobile data with passcode protection.
 - **🛡️ Auto-Cleanup**: Launchers now automatically sweep away "ghost" processes from previous sessions for a clean start every time.
 - **🔒 HTTPS Support**: Secure connections with self-signed SSL certificates.
 - **Local Image Support**: Local images and SVGs (`vscode-file://` paths) in the desktop chat are automatically converted to Base64 so they render perfectly on mobile without exposing local files.

@@ -28,13 +28,19 @@ Thumbs.db
 # Build/Temp
 dist/
 build/
-.DS_Store
 
 # SSL Certificates (generated locally)
 certs/
 
+# Cloudflare Tunnel logs
+cloudflared_log.txt
+
+# Local binaries
+bin/
+
 # Registry
 registry/
+
 # Cursor Memory Bank
 .cursor/mcp
 .cursor/mcp.json

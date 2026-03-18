@@ -13,7 +13,7 @@ echo.
 :: 0. Aggressive Cleanup (Clear any stuck processes from previous runs)
 echo [0/2] Cleaning up orphans...
 taskkill /f /im node.exe /fi "WINDOWTITLE eq AG_SERVER_PROC*" >nul 2>&1
-taskkill /f /im ngrok.exe >nul 2>&1
+taskkill /f /im cloudflared.exe >nul 2>&1
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
 
 :: 1. Ensure dependencies are installed
@@ -38,7 +38,15 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-:: 4. Check for .env file
+:: 4. Check cloudflared
+where cloudflared >nul 2>nul
+if %errorlevel% neq 0 (
+    echo [ERROR] cloudflared missing. Install from: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+    pause
+    exit /b
+)
+
+:: 5. Check for .env file
 if exist ".env" goto ENV_FOUND
 if exist "%~dp0.env" goto ENV_FOUND
 
@@ -49,7 +57,7 @@ if exist ".env.example" (
     echo [INFO] Creating .env from .env.example...
     copy .env.example .env >nul
     echo [SUCCESS] .env created from template!
-    echo [ACTION] Please open .env and update it with your configuration (e.g., NGROK_AUTHTOKEN).
+    echo [ACTION] Please open .env and update it with your Cloudflare Tunnel ID and public URL.
     pause
     exit /b
 ) else (
@@ -61,10 +69,10 @@ if exist ".env.example" (
 :ENV_FOUND
 echo [INFO] .env configuration found.
 
-:: 5. Launch everything via Python
+:: 6. Launch everything via Python
 echo [1/1] Launching Antigravity Phone Connect...
-echo (This will start both the server and the web tunnel)
+echo (This will start both the server and the Cloudflare tunnel)
 python launcher.py --mode web
 
-:: 6. Auto-close when done
+:: 7. Auto-close when done
 exit

@@ -13,14 +13,13 @@ import logging
 # -----------------------------------------------------------------------------
 def check_dependencies():
     """Checks and installs required Python packages."""
-    needed = ["pyngrok", "python-dotenv", "qrcode"]
+    needed = ["python-dotenv", "qrcode"]
     installed = []
     
     # Check what is missing
     for pkg in needed:
         try:
-            if pkg == "pyngrok": from pyngrok import ngrok
-            elif pkg == "python-dotenv": from dotenv import load_dotenv
+            if pkg == "python-dotenv": from dotenv import load_dotenv
             elif pkg == "qrcode": import qrcode
             installed.append(pkg)
         except ImportError:
@@ -90,6 +89,39 @@ def print_qr(url):
     # invert=True is often needed for dark terminals (white blocks on black bg)
     qr.print_ascii(invert=True)
 
+def check_cloudflared():
+    """Checks if cloudflared is installed and available in PATH."""
+    try:
+        subprocess.check_call(
+            ["cloudflared", "--version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        return True
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return False
+
+def start_cloudflare_tunnel(tunnel_id):
+    """Starts a Cloudflare named tunnel via subprocess.
+    
+    Args:
+        tunnel_id: The Cloudflare tunnel UUID to run.
+    
+    Returns:
+        The subprocess.Popen process handle.
+    """
+    cmd = ["cloudflared", "tunnel", "run", tunnel_id]
+    
+    # Redirect cloudflared output to log file
+    log_file = open("cloudflared_log.txt", "w")
+    process = subprocess.Popen(
+        cmd,
+        stdout=log_file,
+        stderr=subprocess.STDOUT
+    )
+    
+    return process, log_file
+
 # -----------------------------------------------------------------------------
 # Main Execution
 # -----------------------------------------------------------------------------
@@ -102,11 +134,6 @@ def main():
     check_dependencies()
     check_node_environment()
     
-    # Suppress pyngrok noise (especially during shutdown)
-    logging.getLogger("pyngrok").setLevel(logging.ERROR)
-    
-    from pyngrok import ngrok
-
     from dotenv import load_dotenv
     
     # Load .env if it exists
@@ -128,6 +155,8 @@ def main():
 
     node_cmd = ["node", "server.js"]
     node_process = None
+    cloudflared_process = None
+    cloudflared_log = None
     
     try:
         # Redirect stdout/stderr to file
@@ -180,25 +209,38 @@ def main():
             print("4. You should be connected automatically!")
             
         elif args.mode == 'web':
-            # Check Ngrok Token
-            token = os.environ.get('NGROK_AUTHTOKEN')
-            if token:
-                ngrok.set_auth_token(token)
-            else:
-                print("⚠️  Warning: NGROK_AUTHTOKEN not found in .env. Tunnel might expire.")
-
-            port = os.environ.get('PORT', '3000')
+            # Check cloudflared is installed
+            if not check_cloudflared():
+                print("❌ Error: 'cloudflared' is not installed or not in PATH.")
+                print("   Install it from: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/")
+                sys.exit(1)
             
-            # Detect HTTPS
-            protocol = "http"
-            if os.path.exists('certs/server.key') and os.path.exists('certs/server.cert'):
-                protocol = "https"
-                
-            addr = f"{protocol}://localhost:{port}"
+            # Read tunnel configuration from .env
+            tunnel_id = os.environ.get('CLOUDFLARE_TUNNEL_ID')
+            public_url = os.environ.get('TUNNEL_PUBLIC_URL')
             
-            print("PLEASE WAIT... Establishing Tunnel...")
-            tunnel = ngrok.connect(addr, host_header="rewrite")
-            public_url = tunnel.public_url
+            if not tunnel_id:
+                print("❌ Error: CLOUDFLARE_TUNNEL_ID not set in .env")
+                print("   Run 'cloudflared tunnel list' to find your tunnel ID.")
+                sys.exit(1)
+            
+            if not public_url:
+                print("❌ Error: TUNNEL_PUBLIC_URL not set in .env")
+                print("   Set this to your tunnel's public domain (e.g., https://your-domain.example.com)")
+                sys.exit(1)
+            
+            # Start Cloudflare tunnel
+            print("⏳ Starting Cloudflare Tunnel...")
+            cloudflared_process, cloudflared_log = start_cloudflare_tunnel(tunnel_id)
+            
+            # Give cloudflared time to establish connection
+            time.sleep(3)
+            
+            if cloudflared_process.poll() is not None:
+                print("❌ Cloudflare Tunnel failed to start. Check cloudflared_log.txt.")
+                sys.exit(1)
+            
+            print("✅ Cloudflare Tunnel connected!")
             
             # Magic URL with password
             final_url = f"{public_url}?key={passcode}"
@@ -206,15 +248,15 @@ def main():
             print("\n" + "="*50)
             print(f"   🌍 GLOBAL WEB ACCESS")
             print("="*50)
-            print(f"🔗 Base URL: {public_url}")
+            print(f"🔗 URL: {public_url}")
             print(f"🔑 Passcode: {passcode}")
             
-            print("\n📱 Scan this Magic QR Code (Auto-Logins):")
+            print("\n📱 Scan this Magic QR Code (Auto-Login):")
             print_qr(final_url)
 
             print("-" * 50)
             print("📝 Steps to Connect:")
-            print("1. Switch your phone to Mobile Data or Turn off Wi-Fi.")
+            print("1. Switch your phone to Mobile Data or use any network.")
             print("2. Open your phone's Camera app or a QR scanner.")
             print("3. Scan the code above to auto-login.")
             print(f"4. Or visit {public_url}")
@@ -235,6 +277,11 @@ def main():
             # Check process status
             if node_process.poll() is not None:
                 print("\n❌ Server process died unexpectedly!")
+                sys.exit(1)
+            
+            # Check cloudflared process if in web mode
+            if args.mode == 'web' and cloudflared_process and cloudflared_process.poll() is not None:
+                print("\n❌ Cloudflare Tunnel process died unexpectedly! Check cloudflared_log.txt.")
                 sys.exit(1)
                 
             # Monitor logs for errors
@@ -274,13 +321,21 @@ def main():
                 except subprocess.TimeoutExpired:
                     node_process.kill()
             
-            if args.mode == 'web':
-                ngrok.kill()
+            if cloudflared_process:
+                cloudflared_process.terminate()
+                try:
+                    cloudflared_process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    cloudflared_process.kill()
+                print("✅ Cloudflare Tunnel stopped.")
         except:
             pass
         
         if 'log_file' in locals() and log_file:
             log_file.close()
+        
+        if cloudflared_log:
+            cloudflared_log.close()
         
         sys.exit(0)
 

@@ -19,7 +19,9 @@
 
 ### Step 1: Launch Antigravity in Debug Mode
 
-Start Antigravity with the remote debugging port enabled:
+> 💡 **NEW (Auto-Launch):** The launcher scripts will now **automatically start Antigravity** in debug mode for you! Just run the script. If Antigravity isn't already running, it will open it automatically.
+
+If you prefer to start it manually:
 
 **Option A: Using Right-Click Context Menu (Recommended)**
 - Run `install_context_menu.bat` (Windows) or `./install_context_menu.sh` (Linux) and select **[1] Install**

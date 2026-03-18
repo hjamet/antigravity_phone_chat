@@ -21,6 +21,22 @@ echo   Antigravity Phone Connect Launcher
 echo ===================================================
 echo.
 
+echo [STARTING] Launching Antigravity with debug port 9000...
+start "" antigravity --remote-debugging-port=9000
+echo ^| set /p="[INFO] Waiting for editor to become ready..."
+timeout /t 5 >nul
+echo Done.
+
+netstat -aon ^| findstr :9000 ^| findstr LISTENING >nul
+if "%ERRORLEVEL%" neq "0" (
+    echo.
+    echo [ERROR] Antigravity failed to open debug port 9000.
+    echo [ERROR] This happens when another instance of Antigravity is already running.
+    echo [ERROR] Please close ALL Antigravity windows entirely, then run this script again.
+    pause
+    exit /b
+)
+
 echo [STARTING] Launching via Unified Launcher...
 python launcher.py --mode local
 

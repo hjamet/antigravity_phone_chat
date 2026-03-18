@@ -69,7 +69,24 @@ if exist ".env.example" (
 :ENV_FOUND
 echo [INFO] .env configuration found.
 
-:: 6. Launch everything via Python
+:: 6. Launch Antigravity
+echo [INFO] Starting Antigravity with debug port 9000...
+start "" antigravity --remote-debugging-port=9000
+echo ^| set /p="[INFO] Waiting for editor to become ready..."
+timeout /t 5 >nul
+echo Done.
+
+netstat -aon ^| findstr :9000 ^| findstr LISTENING >nul
+if "%ERRORLEVEL%" neq "0" (
+    echo.
+    echo [ERROR] Antigravity failed to open debug port 9000.
+    echo [ERROR] This happens when another instance of Antigravity is already running.
+    echo [ERROR] Please close ALL Antigravity windows entirely, then run this script again.
+    pause
+    exit /b
+)
+
+:: 7. Launch everything via Python
 echo [1/1] Launching Antigravity Phone Connect...
 echo (This will start both the server and the Cloudflare tunnel)
 python launcher.py --mode web

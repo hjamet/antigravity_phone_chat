@@ -26,6 +26,20 @@ else
     exit 1
 fi
 
+echo "[INFO] Starting Antigravity with debug port 9000..."
+antigravity --remote-debugging-port=9000 &
+echo -n "[INFO] Waiting for editor to become ready..."
+sleep 5
+echo " Done."
+
+if ! lsof -i:9000 > /dev/null; then
+    echo
+    echo "[ERROR] Antigravity failed to open debug port 9000."
+    echo "[ERROR] This happens when another instance of Antigravity is already running."
+    echo "[ERROR] Please close ALL Antigravity windows entirely, then run this script again."
+    exit 1
+fi
+
 echo "[STARTING] Launching via Unified Launcher..."
 $PYTHON_CMD launcher.py --mode local
 

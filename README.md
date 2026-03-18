@@ -195,6 +195,21 @@ This tool is designed with a **"Local-First"** security model.
 
 ---
 
+## 🛣️ Roadmap
+
+| # | Tâche | Statut | Spec |
+|---|-------|--------|------|
+| 1 | Auto-lancement du Launchpad — Ouvrir l'Agent Manager automatiquement au boot | 🟡 À faire | [auto-launch-launchpad.md](docs/tasks/auto-launch-launchpad.md) |
+| 2 | Pont CDP Agent Manager — Lister et ouvrir des projets via le Launchpad | 🟡 À faire | [agent-manager-bridge.md](docs/tasks/agent-manager-bridge.md) |
+| 3 | Création de Projet — Ouvrir un workspace via File > Open Workspace | 🟡 À faire | [create-open-workspace.md](docs/tasks/create-open-workspace.md) |
+| 4 | Chat dans un Projet — Start new conversation + sélecteur de projet | 🟡 À faire | [chat-in-project.md](docs/tasks/chat-in-project.md) |
+| 5 | Historique Récent — Chat history amélioré | 🟡 À faire | [cleanup-ui-mobile.md](docs/tasks/cleanup-ui-mobile.md) |
+| 6 | Cleanup UI Mobile — Supprimer quick-actions, améliorer le responsive | 🟡 À faire | [cleanup-ui-mobile.md](docs/tasks/cleanup-ui-mobile.md) |
+| 7 | Interface Projets Mobile — Sélecteur de projets dans la webapp | 🟡 À faire | [project-selector-ui.md](docs/tasks/project-selector-ui.md) |
+| 🔮 | Transcription Vocale — Dicter ses messages depuis le mobile | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
+
+---
+
 ## 📂 Documentation
 
 For more technical details, check out:

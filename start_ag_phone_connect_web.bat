@@ -72,11 +72,11 @@ echo [INFO] .env configuration found.
 :: 6. Launch Antigravity
 echo [INFO] Starting Antigravity with debug port 9000...
 start "" antigravity --remote-debugging-port=9000
-echo ^| set /p="[INFO] Waiting for editor to become ready..."
-timeout /t 5 >nul
+<nul set /p="[INFO] Waiting for editor to become ready..."
+ping 127.0.0.1 -n 6 >nul
 echo Done.
 
-netstat -aon ^| findstr :9000 ^| findstr LISTENING >nul
+netstat -aon | findstr :9000 | findstr LISTENING >nul
 if "%ERRORLEVEL%" neq "0" (
     echo.
     echo [ERROR] Antigravity failed to open debug port 9000.

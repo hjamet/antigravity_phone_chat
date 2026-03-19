@@ -505,7 +505,7 @@ export async function autoOpenManager(cdp) {
                 const t = (btn.getAttribute('title') || '').toLowerCase();
                 const a = (btn.getAttribute('aria-label') || '').toLowerCase();
                 const x = (btn.innerText || '').toLowerCase();
-                return t.includes('agent manager') || a.includes('agent manager') || t.includes('launchpad') || x.includes('agent manager');
+                return t.includes('agent manager') || a.includes('agent manager') || x.includes('agent manager');
             });
             if (managerBtn) { managerBtn.click(); return { success: true }; }
             const fb = document.querySelector('#workbench\\\\.parts\\\\.titlebar .titlebar-right .action-toolbar-container a');

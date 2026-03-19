@@ -77,7 +77,8 @@ L'application agit comme un proxy intelligent :
 | 6 | Cleanup UI Mobile | ✅ Fait | [cleanup-ui-mobile.md](docs/tasks/cleanup-ui-mobile.md) |
 | 7 | Interface Projets Mobile | ✅ Fait | [project-selector-ui.md](docs/tasks/project-selector-ui.md) |
 | 8 | **Refactoring Structurel** | ✅ Fait | [structural-refactoring.md](docs/tasks/structural-refactoring.md) |
-| 9 | **Refactoring complet** | ✅ Fait | [agent-manager-refactoring.md](docs/tasks/agent-manager-refactoring.md) |
+| 9 | **Migration Agent Manager** | 🟡 À faire | [agent-manager-refactoring.md](docs/tasks/agent-manager-refactoring.md) |
+| 10 | **Extraction Routes Express** | 🟡 À faire | [extract-express-routes.md](docs/tasks/extract-express-routes.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

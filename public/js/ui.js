@@ -27,7 +27,7 @@ let lastRenderedHash = '';
 
 /**
  * Render chat messages natively (no iframe)
- * Shows the last user message + last significant agent message
+ * Shows structured messages: user, mainParagraph (prominent), progressTitles (compact), directMessage
  */
 export function renderSnapshot(data) {
     if (!data) return;
@@ -40,34 +40,19 @@ export function renderSnapshot(data) {
         return;
     }
 
-    // Get last user message from snapshot
-    let lastSnapshotUser = null;
-    for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === 'user' && messages[i].content?.length > 20) {
-            lastSnapshotUser = messages[i];
-            break;
-        }
-    }
-    
-    // Get last significant agent message (> 300 chars to skip progress updates)
-    let lastAgent = null;
-    for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === 'agent' && messages[i].content?.length > 300) {
-            lastAgent = messages[i];
-            break;
-        }
-    }
-    
-    // Get user message from localStorage (source of truth)
+    // Get user message from localStorage (source of truth) or snapshot
     const savedUserMsg = localStorage.getItem('lastUserMessage') || '';
+
+    // displayMsgs represents the unified timeline sent by server
+    const displayMsgs = [...messages];
     
-    // Pick the best user content: prefer the longest between localStorage and snapshot
-    const userContent = (savedUserMsg.length > (lastSnapshotUser?.content?.length || 0))
-        ? savedUserMsg 
-        : (lastSnapshotUser?.content || savedUserMsg);
+    // Fallback: if no user in list but we have one in localStorage, add it
+    if (!displayMsgs.some(m => m.role === 'user') && savedUserMsg) {
+        displayMsgs.unshift({ role: 'user', type: 'message', content: savedUserMsg });
+    }
 
     // Build a hash to detect changes
-    const hash = (userContent?.substring(0, 50) || '') + '|' + (lastAgent?.content?.substring(0, 50) || '');
+    const hash = displayMsgs.map(m => (m.type || '') + ':' + (m.content?.substring(0, 30) || (m.steps ? JSON.stringify(m.steps).substring(0, 30) : '') )).join('|');
     
     const container = elements.chatContent;
     if (!container) return;
@@ -77,18 +62,8 @@ export function renderSnapshot(data) {
         lastRenderedHash = hash;
         container.innerHTML = '';
         
-        if (userContent) {
-            container.appendChild(createMessageBubble({ role: 'user', content: userContent }, 'user'));
-        }
-        
-        if (lastAgent) {
-            container.appendChild(createMessageBubble(lastAgent, 'agent'));
-        }
-    } else {
-        // Content hasn't changed structurally, update last agent bubble (streaming)
-        const agentBubble = container.querySelector('.chat-bubble.agent .msg-content');
-        if (agentBubble && lastAgent) {
-            agentBubble.innerHTML = formatContent(lastAgent);
+        for (const msg of displayMsgs) {
+            container.appendChild(createMessageBubble(msg));
         }
     }
     
@@ -102,24 +77,79 @@ export function renderSnapshot(data) {
 }
 
 /**
- * Create a single chat message bubble
+ * Create a chat message bubble based on type
  */
-function createMessageBubble(msg, role) {
+function createMessageBubble(msg) {
     const div = document.createElement('div');
-    div.className = `chat-bubble ${role}`;
+    const role = msg.role;
+    const type = msg.type || 'message';
     
-    // Role indicator
-    const roleLabel = document.createElement('div');
-    roleLabel.className = 'msg-role';
-    roleLabel.textContent = role === 'user' ? '👤 You' : '🤖 Agent';
-    
-    // Content 
-    const content = document.createElement('div');
-    content.className = 'msg-content';
-    content.innerHTML = formatContent(msg);
-    
-    div.appendChild(roleLabel);
-    div.appendChild(content);
+    if (role === 'user') {
+        div.className = 'chat-bubble user';
+        const roleLabel = document.createElement('div');
+        roleLabel.className = 'msg-role';
+        roleLabel.textContent = '👤 You';
+        const content = document.createElement('div');
+        content.className = 'msg-content';
+        content.innerHTML = formatContent(msg);
+        div.appendChild(roleLabel);
+        div.appendChild(content);
+    } else if (type === 'taskBlock') {
+        // Hierarchical task display showing the current summary and accumulated steps
+        div.className = 'chat-bubble agent main-paragraph';
+        
+        let contentHtml = '';
+        
+        // 1. Show the main task title
+        if (msg.taskTitle) {
+            contentHtml += `<h3 class="group-task-title" style="margin-top: 5px; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; font-size: 1.1em;">🎯 ${msg.taskTitle}</h3>`;
+        }
+        
+        // 2. Render the top-level current task summary (which replaces old ones)
+        if (msg.taskSummary) {
+            contentHtml += `<div class="msg-content task-step-summary" style="margin-bottom: 12px;">${formatContent({ content: msg.taskSummary })}</div>`;
+        }
+        
+        // 3. Render the list of accumulated TaskStatus steps below the summary
+        if (msg.allStatuses && msg.allStatuses.length > 0) {
+            msg.allStatuses.forEach((status, idx) => {
+                if (status) {
+                    contentHtml += `<div class="task-step-title" style="font-weight: 600; margin-bottom: 4px; margin-top: 8px; color: var(--accent-light); font-size: 0.95em;">## ${idx + 1}. ${status}</div>`;
+                }
+            });
+        }
+        
+        div.innerHTML = contentHtml;
+    } else if (type === 'progressTitles') {
+        // Compact progress titles
+        div.className = 'chat-bubble agent progress-titles';
+        if (msg.taskTitle) {
+            const taskLabel = document.createElement('div');
+            taskLabel.className = 'msg-task-title compact';
+            taskLabel.textContent = '⚙️ ' + msg.taskTitle;
+            div.appendChild(taskLabel);
+        }
+        const list = document.createElement('ul');
+        list.className = 'progress-list';
+        const titles = msg.titles || msg.content.split('\n');
+        for (const t of titles.slice(-5)) { // Only show last 5
+            const li = document.createElement('li');
+            li.textContent = t;
+            list.appendChild(li);
+        }
+        div.appendChild(list);
+    } else {
+        // Direct message or generic
+        div.className = 'chat-bubble agent';
+        const roleLabel = document.createElement('div');
+        roleLabel.className = 'msg-role';
+        roleLabel.textContent = '🤖 Agent';
+        const content = document.createElement('div');
+        content.className = 'msg-content';
+        content.innerHTML = formatContent(msg);
+        div.appendChild(roleLabel);
+        div.appendChild(content);
+    }
     
     return div;
 }
@@ -211,6 +241,16 @@ export function updateStateUI(state) {
     }
     if (elements.statusText) {
         elements.statusText.textContent = state.workspace || 'Connected';
+    }
+    // Update project selector status label (fixes stuck "Connecting...")
+    const projectStatus = document.getElementById('currentProjectStatus');
+    if (projectStatus) {
+        projectStatus.textContent = state.workspace ? 'Connected' : 'Online';
+    }
+    // Update stats text (fixes stuck "Syncing...")
+    const statsText = document.getElementById('statsText');
+    if (statsText) {
+        statsText.textContent = state.workspace || 'Ready';
     }
 }
 

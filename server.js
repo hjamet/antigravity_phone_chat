@@ -21,6 +21,7 @@ import * as managerCdp from './src/cdp/manager.js';
 // Modular Server Logic
 import { setupRoutes } from './src/server/routes.js';
 import { setupWebSocket } from './src/server/ws.js';
+import { chatHistoryService } from './src/server/services/ChatHistoryService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -177,8 +178,9 @@ async function initCDP() {
         setTimeout(async () => {
             const snap = await managerCdp.captureSnapshot(cdpConnections.manager, { fullScroll: false });
             if (snap && !snap.error) {
-                lastSnapshot.data = snap;
-                lastSnapshotHash = hashString(JSON.stringify(snap.messages) + (snap.isStreaming ? '1' : '0'));
+                const { hash, snapshot: processedSnapshot } = chatHistoryService.processSnapshot(snap);
+                lastSnapshot.data = processedSnapshot;
+                lastSnapshotHash = hash;
             }
         }, 1000);
     }
@@ -206,29 +208,10 @@ async function startPolling(wss) {
                         console.error('CRITICAL: snapshot has no error but messages is undefined!', JSON.stringify(snapshot).substring(0, 500));
                     }
                     
-                    // Update cached agent message: keep the longest agent msg > 300 chars
-                    const agentMsgs = (snapshot.messages || []).filter(m => m.role === 'agent' && m.content?.length > 300);
-                    if (agentMsgs.length > 0) {
-                        const best = agentMsgs.sort((a, b) => b.content.length - a.content.length)[0];
-                        if (!cachedAgentMsg || best.content !== cachedAgentMsg.content) {
-                            cachedAgentMsg = best;
-                            console.log(`💾 Cached agent message (${best.content.length} chars)`);
-                        }
-                    }
+                    const { hash, hasChanged, snapshot: processedSnapshot } = chatHistoryService.processSnapshot(snapshot);
+                    lastSnapshot.data = processedSnapshot;
                     
-                    // Inject cached agent message into snapshot if not already present
-                    if (cachedAgentMsg) {
-                        const hasCached = snapshot.messages.some(m => m.content === cachedAgentMsg.content);
-                        if (!hasCached) {
-                            snapshot.messages.push(cachedAgentMsg);
-                        }
-                    }
-                    
-                    lastSnapshot.data = snapshot;
-                    
-                    const hash = hashString(JSON.stringify(lastSnapshot.data.messages) + (lastSnapshot.data.isStreaming ? '1' : '0'));
-                    if (hash !== lastSnapshotHash) {
-                        lastSnapshotHash = hash;
+                    if (hasChanged) {
                         wss.broadcastUpdate?.(hash);
                         console.log(`📸 Snapshot updated(hash: ${hash})`);
                     }
@@ -299,7 +282,7 @@ async function createServer() {
 
     setupRoutes(app, {
         cdpConnections,
-        lastSnapshot,
+        chatHistoryService,
         APP_PASSWORD,
         AUTH_COOKIE_NAME,
         AUTH_TOKEN,

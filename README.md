@@ -24,8 +24,10 @@ Les variables d'environnement sont gérées dans le fichier `.env` :
 
 ## 4. # Description détaillée
 L'application agit comme un proxy intelligent :
-- **Backend (Node.js)** : Architecture ultra-modulaire. `server.js` est un bootstrap léger déléguant aux modules `src/server/routes.js` (API) et `src/server/ws.js` (WebSockets).
-- **Scripts CDP** : `src/cdp/manager.js` extrait le contenu **agent** du DOM de l'Agent Manager (nettoyé des blocs techniques). `src/cdp/workbench.js` gère l'UI Workbench.
+- **Backend (Node.js)** : Architecture en couches modulaire. `server.js` (Bootstrap), `routes.js` (Présentation API), et `ws.js` (WebSockets).
+- **Service (Métier)** : `src/server/services/ChatHistoryService.js` gère la chronologie et valide les données.
+- **Validation (Zod)** : `src/schemas/snapshot.js` assure que toutes les données extraites respectent le format attendu.
+- **Scripts CDP** : `src/cdp/manager.js` extrait le contenu du DOM dynamiquement à l'aide des sélecteurs centralisés dans `src/config/selectors.js`.
 - **Messages utilisateur** : Stockés en `localStorage` côté client quand envoyés, car la virtualisation du DOM de l'Agent Manager empêche leur extraction fiable.
 - **Tunneling (Cloudflare)** : Expose l'interface mobile via un tunnel sécurisé avec mot de passe.
 - **Frontend (ES Modules)** : Interface découpée en modules indépendants (`public/js/`) — seuls les 2 derniers messages (user + agent) sont affichés.
@@ -39,23 +41,30 @@ L'application agit comme un proxy intelligent :
 | Mode/Model Sync | ✅ Stable | Agent Manager CDP |
 
 ## 6. # Documentation Index
+| Titre (Lien) | Description |
+|--------------|-------------|
 | [Index des Tâches](docs/index_tasks.md) | Liste exhaustive des spécifications et de la roadmap |
 | [Index Doc](docs/index_docs.md) | Index de la documentation technique et de design |
-| [Architecture](docs/architecture/code_documentation.md) | Détails techniques du flux de données |
+| [Index Architecture](docs/index_architecture.md) | Index des détails techniques, flux de données et configurations |
 
 ## 7. # Plan du repo
 ```text
 .
 ├── src/
-│   ├── cdp/            # Scripts d'injection CDP modularisés (dont ui_inspector.js)
-│   └── server/         # Logique serveur (Routes & WebSockets)
+│   ├── cdp/              # Scripts d'injection CDP (manager.js, workbench.js, ui_inspector.js)
+│   ├── config/           # Configuration centralisée (selectors.js)
+│   ├── schemas/          # Schémas Zod de validation (snapshot.js)
+│   └── server/
+│       ├── services/     # Couche métier (ChatHistoryService.js)
+│       ├── routes.js     # API REST (Express)
+│       └── ws.js         # WebSockets
 ├── public/
-│   └── js/             # Frontend modulaire (ESM)
-├── docs/               # Documentation détaillée et spécifications
-├── scripts/            # Utilitaires Node.js (dont generate_ssl.js)
-├── startup_scripts/    # Scripts de lancement (.bat, .sh, launcher.py)
-├── certs/              # Certificats SSL auto-signés (gitignored)
-└── server.js           # Serveur de bridge (EntryPoint - Bootstrap)
+│   └── js/               # Frontend modulaire (ESM)
+├── docs/                 # Documentation détaillée et spécifications
+├── scripts/              # Utilitaires Node.js (dont generate_ssl.js)
+├── startup_scripts/      # Scripts de lancement (.bat, .sh, launcher.py)
+├── certs/                # Certificats SSL auto-signés (gitignored)
+└── server.js             # Serveur de bridge (EntryPoint - Bootstrap)
 ```
 
 ## 8. # Scripts d'entrée principaux
@@ -84,6 +93,9 @@ L'application agit comme un proxy intelligent :
 | 9 | **Migration Agent Manager** | ✅ Fait | [agent-manager-refactoring.md](docs/tasks/agent-manager-refactoring.md) |
 | 10 | **Extraction Routes Express** | ✅ Fait | [extract-express-routes.md](docs/tasks/extract-express-routes.md) |
 | 11 | **Nettoyage Repo & Alignement** | ✅ Fait | [repo-cleanup.md](docs/tasks/repo-cleanup.md) |
+| 12 | **Refonte API & Architecture en Couches** | ✅ Fait | [api-layered-architecture.md](docs/tasks/api-layered-architecture.md) |
+| 13 | **Extraction Sélecteurs CSS** | ✅ Fait | [selector-config-extraction.md](docs/tasks/selector-config-extraction.md) |
+| 14 | **Validation Snapshots & Tests (Zod)** | ✅ Fait | [snapshot-validation-tests.md](docs/tasks/snapshot-validation-tests.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

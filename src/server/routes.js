@@ -9,7 +9,7 @@ import { join } from 'path';
  */
 export function setupRoutes(app, { 
     cdpConnections, 
-    lastSnapshot, 
+    chatHistoryService, 
     APP_PASSWORD, 
     AUTH_COOKIE_NAME, 
     AUTH_TOKEN, 
@@ -56,11 +56,12 @@ export function setupRoutes(app, {
 
     // Get current snapshot
     router.get('/snapshot', (req, res) => {
-        if (!lastSnapshot.data) {
+        const snapshot = chatHistoryService.getSnapshot();
+        if (!snapshot || !snapshot.messages || snapshot.messages.length === 0) {
             return res.status(503).json({ error: 'No snapshot available yet' });
         }
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.json(lastSnapshot.data);
+        res.json(snapshot);
     });
 
     // SSL status endpoint
@@ -154,8 +155,8 @@ export function setupRoutes(app, {
         try {
             const snapshot = await managerCdp.captureSnapshot(cdpConnections.manager, { fullScroll: false });
             if (snapshot && !snapshot.error) {
-                lastSnapshot.data = snapshot;
-                return res.json(snapshot);
+                const processed = chatHistoryService.processSnapshot(snapshot);
+                return res.json(processed.snapshot);
             }
             return res.status(503).json({ error: snapshot?.error || 'Snapshot failed' });
         } catch(e) {
@@ -173,55 +174,89 @@ export function setupRoutes(app, {
             
             const DEBUG_SCRIPT = `(async () => {
                 try {
-                    // Approach 1: Search for specific marker classes in the ENTIRE document
-                    const selectTexts = document.querySelectorAll('.select-text');
-                    const markdownBody = document.querySelectorAll('.markdown-body');
-                    const leadRelaxed = document.querySelectorAll('.leading-relaxed');
-                    const whitespacePre = document.querySelectorAll('.whitespace-pre-wrap');
+                    // Find the main turns container
+                    const chatScroll = Array.from(document.querySelectorAll('[class*="scrollbar-hide"][class*="overflow-y"]'))
+                        .filter(el => el.scrollHeight > 100 && el.offsetWidth > 200)
+                        .sort((a,b) => b.scrollHeight - a.scrollHeight)[0];
+                    if (!chatScroll) return { error: 'no chatScroll' };
                     
-                    // Approach 2: data-test attributes  
-                    const dataTestEls = document.querySelectorAll('[data-test-id], [data-test-subtype]');
+                    // Navigate to the flex container that holds turns
+                    const wrapper = chatScroll.children[0]; // mx-auto w-full
+                    const innerDiv = wrapper?.children[0]; // anonymous div
+                    const turnsDiv = innerDiv?.querySelector('.relative.flex.flex-col') || innerDiv; // relative flex flex-col gap-y-3 px-4
                     
-                    // Approach 3: The chat input box to orient our search
-                    const inputBox = document.getElementById('antigravity.agentSidePanelInputBox');
+                    const turns = Array.from(turnsDiv?.children || []);
+                    const lastTurns = turns.slice(-3);
                     
-                    // Approach 4: find all divs with text > 50 chars that aren't in buttons
-                    const allTextDivs = Array.from(document.querySelectorAll('div'))
-                        .filter(el => {
-                            const t = el.innerText || '';
-                            return t.length > 50 && t.length < 50000 && 
-                                   !el.closest('button') &&
-                                   el.closest('[class*="scrollbar-hide"]');
-                        })
-                        .sort((a,b) => b.innerText.length - a.innerText.length)
-                        .slice(0, 10)
-                        .map(el => ({
-                            cls: (el.className || '').toString().substring(0, 100),
-                            textLen: el.innerText.length,
-                            preview: el.innerText.substring(0, 100),
-                            tag: el.tagName,
-                            parent: el.parentElement?.className?.toString()?.substring(0, 80) || ''
-                        }));
+                    const turnsInfo = lastTurns.map((turn, idx) => {
+                        const globalIdx = turns.length - 3 + idx;
+                        
+                        // Check if this is a user turn or agent turn
+                        const userBlock = turn.querySelector('.bg-gray-500\\\\/15.select-text, [class*="bg-gray-500"][class*="select-text"]');
+                        const isolateBlocks = Array.from(turn.querySelectorAll('.isolate'));
+                        
+                        if (userBlock) {
+                            return {
+                                idx: globalIdx,
+                                type: 'user',
+                                textLen: userBlock.innerText?.length || 0,
+                                preview: (userBlock.innerText || '').substring(0, 100)
+                            };
+                        }
+                        
+                        // Agent turn: examine the .isolate blocks (each is a "reflection block")
+                        const blocks = isolateBlocks.map(iso => {
+                            // First child is typically the header/main paragraph
+                            const children = Array.from(iso.children);
+                            
+                            const blockInfo = {
+                                cls: (iso.className || '').substring(0, 80),
+                                childCount: children.length,
+                                sections: []
+                            };
+                            
+                            children.forEach((child, ci) => {
+                                const childCls = (child.className || '').toString();
+                                const text = (child.innerText || '').trim();
+                                
+                                blockInfo.sections.push({
+                                    idx: ci,
+                                    cls: childCls.substring(0, 80),
+                                    tag: child.tagName,
+                                    textLen: text.length,
+                                    preview: text.substring(0, 120),
+                                    // Check if it contains progress updates header
+                                    hasProgressUpdates: text.includes('Progress Updates'),
+                                    hasFilesEdited: text.includes('Files Edited'),
+                                    hasBackgroundSteps: text.includes('Background Steps'),
+                                    hasTask: text.includes('Task')
+                                });
+                            });
+                            
+                            return blockInfo;
+                        });
+                        
+                        // Also check for non-isolate select-text (agent's direct messages like notify_user)
+                        const directSelectTexts = Array.from(turn.querySelectorAll('.select-text.leading-relaxed'))
+                            .filter(el => !el.closest('.isolate'))
+                            .map(el => ({
+                                textLen: (el.innerText || '').length,
+                                preview: (el.innerText || '').substring(0, 100),
+                                cls: (el.className || '').substring(0, 80)
+                            }));
+                        
+                        return {
+                            idx: globalIdx,
+                            type: 'agent',
+                            totalTextLen: (turn.innerText || '').length,
+                            isolateBlocks: blocks,
+                            directMessages: directSelectTexts
+                        };
+                    });
                     
                     return {
-                        selectTexts: selectTexts.length,
-                        markdownBody: markdownBody.length,
-                        leadRelaxed: leadRelaxed.length,
-                        whitespacePre: whitespacePre.length,
-                        dataTestEls: Array.from(dataTestEls).slice(0, 5).map(el => ({
-                            id: el.getAttribute('data-test-id'),
-                            subtype: el.getAttribute('data-test-subtype'),
-                            cls: el.className?.toString()?.substring(0, 80),
-                            textLen: (el.innerText || '').length
-                        })),
-                        inputBox: inputBox ? { found: true, parentCls: inputBox.parentElement?.className?.substring(0, 80) } : { found: false },
-                        topTextDivs: allTextDivs,
-                        selectTextInfo: Array.from(selectTexts).slice(0, 3).map(el => ({
-                            cls: el.className?.toString()?.substring(0, 100),
-                            textLen: (el.innerText || '').length,
-                            preview: (el.innerText || '').substring(0, 100),
-                            parentCls: el.parentElement?.className?.toString()?.substring(0, 80)
-                        }))
+                        totalTurns: turns.length,
+                        turns: turnsInfo
                     };
                 } catch(e) {
                     return { error: e.message, stack: e.stack?.substring(0, 300) };
@@ -255,7 +290,7 @@ export function setupRoutes(app, {
                 // Instantly update snapshot right after scrolling
                 const snapshot = await managerCdp.captureSnapshot(cdpConnections.manager, { fullScroll: false });
                 if (snapshot && !snapshot.error) {
-                    lastSnapshot.data = snapshot;
+                    chatHistoryService.processSnapshot(snapshot);
                 }
             }
             res.json(result);
@@ -313,6 +348,74 @@ export function setupRoutes(app, {
             return res.json({ success: true, message: 'Open Folder dialog opened on your computer.' });
         }
         res.status(500).json(result);
+    });
+
+    // Auto-verification endpoint for the agent
+    router.post('/api/verify-extraction', (req, res) => {
+        const { expectedTitle, expectedSummary } = req.body;
+        
+        if (!expectedSummary) {
+            return res.status(400).json({ error: 'expectedSummary is required' });
+        }
+
+        const snapshot = chatHistoryService.getSnapshot();
+        const messages = snapshot?.messages || [];
+
+        // Find the last taskBlock
+        const lastTaskBlock = [...messages].reverse().find(m => m.type === 'taskBlock');
+
+        if (!lastTaskBlock) {
+            return res.status(404).json({ success: false, error: 'No taskBlock found in recent history' });
+        }
+
+        const titleMatch = !expectedTitle || (lastTaskBlock.taskTitle || '').includes(expectedTitle.substring(0, 20)) || (expectedTitle || '').includes((lastTaskBlock.taskTitle || '').substring(0, 20));
+            
+        const expectedPrefix = expectedSummary.substring(0, 40).trim();
+        const actualSummary = lastTaskBlock.taskSummary || '';
+        const summaryMatch = actualSummary.includes(expectedPrefix) || expectedPrefix.includes(actualSummary.substring(0, 40));
+
+        if (titleMatch && summaryMatch) {
+            return res.json({ success: true, message: 'Extraction verified successfully' });
+        } else {
+            return res.status(409).json({ 
+                success: false, 
+                error: 'Extraction mismatch', 
+                expected: { title: expectedTitle, summary: expectedPrefix },
+                actual: { title: lastTaskBlock.taskTitle, summary: actualSummary.substring(0, 50) }
+            });
+        }
+    });
+
+    // --- Simple Controller Accessor Routes ---
+
+    router.get('/api/last-title', (req, res) => {
+        res.json({ title: chatHistoryService.getLastTitle() });
+    });
+
+    router.get('/api/last-paragraph', (req, res) => {
+        res.json({ paragraph: chatHistoryService.getLastParagraph() });
+    });
+
+    router.get('/api/last-status', (req, res) => {
+        res.json({ status: chatHistoryService.getLastStatus() });
+    });
+
+    router.get('/api/last-subtitles', (req, res) => {
+        res.json({ subtitles: chatHistoryService.getLastSubtitles() });
+    });
+
+    router.get('/api/last-user-message', (req, res) => {
+        res.json({ message: chatHistoryService.getLastUserMessage() });
+    });
+
+    router.get('/api/last-agent-message', (req, res) => {
+        res.json({ message: chatHistoryService.getLastAgentMessage() });
+    });
+
+    // --- High-Level Controller Endpoint (polled every second by frontend) ---
+
+    router.get('/api/chat-state', (req, res) => {
+        res.json(chatHistoryService.getChatState());
     });
 
     // Use router

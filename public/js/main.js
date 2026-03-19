@@ -264,6 +264,17 @@ async function init() {
     // Initial state fetch
     syncState();
     setInterval(syncState, 5000);
+
+    // Reliable snapshot polling (1s) — always active regardless of WS state
+    setInterval(async () => {
+        try {
+            const res = await fetchWithAuth(`/snapshot?t=${Date.now()}`);
+            const data = await res.json();
+            if (data && !data.error && data.messages) {
+                handleSnapshot(data);
+            }
+        } catch (e) {}
+    }, 1000);
 }
 
 /**

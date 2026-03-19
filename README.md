@@ -25,9 +25,10 @@ Les variables d'environnement sont gérées dans le fichier `.env` :
 ## 4. # Description détaillée
 L'application agit comme un proxy intelligent :
 - **Backend (Node.js)** : Architecture ultra-modulaire. `server.js` est un bootstrap léger déléguant aux modules `src/server/routes.js` (API) et `src/server/ws.js` (WebSockets).
-- **Scripts CDP** : Logique d'interaction extraite dans `src/cdp/manager.js` (Chat & Projets) et `src/cdp/workbench.js` (UI Workbench).
+- **Scripts CDP** : `src/cdp/manager.js` extrait le contenu **agent** du DOM de l'Agent Manager (nettoyé des blocs techniques). `src/cdp/workbench.js` gère l'UI Workbench.
+- **Messages utilisateur** : Stockés en `localStorage` côté client quand envoyés, car la virtualisation du DOM de l'Agent Manager empêche leur extraction fiable.
 - **Tunneling (Cloudflare)** : Expose l'interface mobile via un tunnel sécurisé avec mot de passe.
-- **Frontend (ES Modules)** : Interface découpée en modules indépendants (`public/js/`) pour une meilleure maintenance.
+- **Frontend (ES Modules)** : Interface découpée en modules indépendants (`public/js/`) — seuls les 2 derniers messages (user + agent) sont affichés.
 
 ## 5. # Principaux résultats
 | Feature | État | Source de vérité |

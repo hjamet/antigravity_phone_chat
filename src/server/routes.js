@@ -163,6 +163,89 @@ export function setupRoutes(app, {
         }
     });
 
+    // Temporary debug endpoint to inspect DOM structure
+    router.get('/debug-dom', async (req, res) => {
+        try {
+            const cdp = cdpConnections.manager;
+            if (!cdp || !cdp.ws || cdp.ws.readyState !== 1) {
+                return res.status(503).json({ error: 'No CDP connection' });
+            }
+            
+            const DEBUG_SCRIPT = `(async () => {
+                try {
+                    // Approach 1: Search for specific marker classes in the ENTIRE document
+                    const selectTexts = document.querySelectorAll('.select-text');
+                    const markdownBody = document.querySelectorAll('.markdown-body');
+                    const leadRelaxed = document.querySelectorAll('.leading-relaxed');
+                    const whitespacePre = document.querySelectorAll('.whitespace-pre-wrap');
+                    
+                    // Approach 2: data-test attributes  
+                    const dataTestEls = document.querySelectorAll('[data-test-id], [data-test-subtype]');
+                    
+                    // Approach 3: The chat input box to orient our search
+                    const inputBox = document.getElementById('antigravity.agentSidePanelInputBox');
+                    
+                    // Approach 4: find all divs with text > 50 chars that aren't in buttons
+                    const allTextDivs = Array.from(document.querySelectorAll('div'))
+                        .filter(el => {
+                            const t = el.innerText || '';
+                            return t.length > 50 && t.length < 50000 && 
+                                   !el.closest('button') &&
+                                   el.closest('[class*="scrollbar-hide"]');
+                        })
+                        .sort((a,b) => b.innerText.length - a.innerText.length)
+                        .slice(0, 10)
+                        .map(el => ({
+                            cls: (el.className || '').toString().substring(0, 100),
+                            textLen: el.innerText.length,
+                            preview: el.innerText.substring(0, 100),
+                            tag: el.tagName,
+                            parent: el.parentElement?.className?.toString()?.substring(0, 80) || ''
+                        }));
+                    
+                    return {
+                        selectTexts: selectTexts.length,
+                        markdownBody: markdownBody.length,
+                        leadRelaxed: leadRelaxed.length,
+                        whitespacePre: whitespacePre.length,
+                        dataTestEls: Array.from(dataTestEls).slice(0, 5).map(el => ({
+                            id: el.getAttribute('data-test-id'),
+                            subtype: el.getAttribute('data-test-subtype'),
+                            cls: el.className?.toString()?.substring(0, 80),
+                            textLen: (el.innerText || '').length
+                        })),
+                        inputBox: inputBox ? { found: true, parentCls: inputBox.parentElement?.className?.substring(0, 80) } : { found: false },
+                        topTextDivs: allTextDivs,
+                        selectTextInfo: Array.from(selectTexts).slice(0, 3).map(el => ({
+                            cls: el.className?.toString()?.substring(0, 100),
+                            textLen: (el.innerText || '').length,
+                            preview: (el.innerText || '').substring(0, 100),
+                            parentCls: el.parentElement?.className?.toString()?.substring(0, 80)
+                        }))
+                    };
+                } catch(e) {
+                    return { error: e.message, stack: e.stack?.substring(0, 300) };
+                }
+            })()`;
+            
+            for (const ctx of cdp.contexts) {
+                try {
+                    const result = await cdp.call("Runtime.evaluate", {
+                        expression: DEBUG_SCRIPT,
+                        returnByValue: true,
+                        awaitPromise: true,
+                        contextId: ctx.id
+                    });
+                    if (result.result?.value && !result.result.value.error) {
+                        return res.json(result.result.value);
+                    }
+                } catch(e) { /* try next context */ }
+            }
+            return res.status(503).json({ error: 'No valid context found' });
+        } catch(e) {
+            return res.status(500).json({ error: e.message });
+        }
+    });
     router.post('/remote-scroll', async (req, res) => {
         try {
             const { deltaY } = req.body;

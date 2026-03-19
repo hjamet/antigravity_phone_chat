@@ -11,15 +11,20 @@ import { elements } from './ui.js';
 export async function sendMessage(text) {
     if (!text || !text.trim()) return;
 
+    const trimmed = text.trim();
     elements.sendBtn.disabled = true;
     elements.chatInput.value = '';
     elements.chatInput.style.height = 'auto';
+    
+    // Store user message locally for immediate display
+    localStorage.setItem('lastUserMessage', trimmed);
+    window.dispatchEvent(new CustomEvent('user-message-sent', { detail: trimmed }));
 
     try {
         const res = await fetchWithAuth('/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text.trim() })
+            body: JSON.stringify({ message: trimmed })
         });
         const data = await res.json();
         if (data.error) {
@@ -47,10 +52,8 @@ export async function stopGeneration() {
 /**
  * Auto-scroll the snapshot frame to the bottom
  */
-export function scrollToBottom(frame) {
-    const doc = frame.contentDocument || frame.contentWindow.document;
-    const scrollContainer = doc.querySelector('.overflow-y-auto') || doc.documentElement;
-    if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+export function scrollToBottom(container) {
+    if (container) {
+        container.scrollTop = container.scrollHeight;
     }
 }

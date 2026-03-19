@@ -36,6 +36,8 @@ let AUTH_TOKEN = 'ag_default_token';
 const cdpConnections = { workbench: null, manager: null };
 let lastSnapshot = { data: null };
 let lastSnapshotHash = null;
+// Cache the last significant agent message (> 300 chars) to survive DOM virtualization
+let cachedAgentMsg = null;
 
 /**
  * Simple hash function for change detection
@@ -197,11 +199,31 @@ async function startPolling(wss) {
         if (cdpConnections.manager) {
             try {
                 console.log('📸 Attempting to capture snapshot from Manager...');
-                // Background poll extracts ONLY the visible DOM elements (no scroll = no jumping)
                 const snapshot = await managerCdp.captureSnapshot(cdpConnections.manager, { fullScroll: false });
                 
                 if (snapshot && !snapshot.error) {
-                    // No history merging anymore. The Phone UI is just a mirror of the Agent Manager viewport.
+                    if (!snapshot.messages) {
+                        console.error('CRITICAL: snapshot has no error but messages is undefined!', JSON.stringify(snapshot).substring(0, 500));
+                    }
+                    
+                    // Update cached agent message: keep the longest agent msg > 300 chars
+                    const agentMsgs = (snapshot.messages || []).filter(m => m.role === 'agent' && m.content?.length > 300);
+                    if (agentMsgs.length > 0) {
+                        const best = agentMsgs.sort((a, b) => b.content.length - a.content.length)[0];
+                        if (!cachedAgentMsg || best.content !== cachedAgentMsg.content) {
+                            cachedAgentMsg = best;
+                            console.log(`💾 Cached agent message (${best.content.length} chars)`);
+                        }
+                    }
+                    
+                    // Inject cached agent message into snapshot if not already present
+                    if (cachedAgentMsg) {
+                        const hasCached = snapshot.messages.some(m => m.content === cachedAgentMsg.content);
+                        if (!hasCached) {
+                            snapshot.messages.push(cachedAgentMsg);
+                        }
+                    }
+                    
                     lastSnapshot.data = snapshot;
                     
                     const hash = hashString(JSON.stringify(lastSnapshot.data.messages) + (lastSnapshot.data.isStreaming ? '1' : '0'));
@@ -209,8 +231,6 @@ async function startPolling(wss) {
                         lastSnapshotHash = hash;
                         wss.broadcastUpdate?.(hash);
                         console.log(`📸 Snapshot updated(hash: ${hash})`);
-                    } else {
-                        // console.log('📸 Snapshot hash unchanged.');
                     }
                 } else {
                     console.warn('⚠️ Snapshot capture returned error or null:', snapshot?.error || 'null');

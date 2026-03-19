@@ -118,9 +118,9 @@ async function init() {
         setTimeout(() => fetchSnapshotDirect(2, 500), 500);
     });
     
-    document.getElementById('historyBtn')?.addEventListener('click', () => {
-        loadHistory();
+    document.getElementById('historyBtn')?.addEventListener('click', async () => {
         toggleLayer(elements.historyLayer, true);
+        await loadHistory();
     });
     
     // Remote Scroll controls (Touch & Wheel)
@@ -172,12 +172,10 @@ async function init() {
             }
         }, { passive: true });
     }
-    });
-    
     // Project handles
-    document.getElementById('projectSelectorBtn')?.addEventListener('click', () => {
-        loadProjects();
+    document.getElementById('projectSelectorBtn')?.addEventListener('click', async () => {
         toggleLayer(elements.projectsLayer, true);
+        await loadProjects();
     });
 
     // Mode selector dropdown

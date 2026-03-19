@@ -8,128 +8,70 @@
  */
 export async function captureSnapshot(cdp, options = { fullScroll: false }) {
     if (!cdp) return null;
-    const fullScroll = !!options.fullScroll;
 
     const CAPTURE_SCRIPT = `(async () => {
         try {
-            // Find the chat scroll container (scrollbar-hide class, largest scrollHeight)
+            // Find the chat scroll container
             const chatScroll = Array.from(document.querySelectorAll('[class*="scrollbar-hide"][class*="overflow-y"]'))
                 .filter(el => el.scrollHeight > 100 && el.offsetWidth > 200)
                 .sort((a,b) => b.scrollHeight - a.scrollHeight)[0];
             
             if (!chatScroll) return { error: 'No chat scroll container found' };
             
-            // Navigate to the turns container
-            const wrapper = chatScroll.children[0];
-            if (!wrapper) return { error: 'No wrapper found' };
+            // Find ALL .select-text elements in the document (these are the actual message contents)
+            const allSelectTexts = Array.from(document.querySelectorAll('.select-text'));
             
-            let turnsContainer = wrapper;
-            if (wrapper.children[0]) {
-                const candidate = wrapper.children[0];
-                const cls = candidate.className || '';
-                if (cls.includes('flex') && cls.includes('gap')) {
-                    turnsContainer = candidate;
-                }
-            }
-            
-            const originalScroll = chatScroll.scrollTop;
-            const scrollStep = chatScroll.clientHeight * 0.7;
-            const seenIndices = new Set();
             const messages = [];
-            const doFullScroll = ${fullScroll};
             
-            let scrollPos = doFullScroll ? 0 : chatScroll.scrollTop;
-            const maxIterations = doFullScroll ? 50 : 1; 
-            let iterations = 0;
-            
-            if (doFullScroll && chatScroll.scrollTop !== 0) {
-                chatScroll.scrollTop = 0;
-                await new Promise(r => setTimeout(r, 200));
-            }
-            
-            while (iterations < maxIterations) {
-                if (doFullScroll) {
-                    chatScroll.scrollTop = scrollPos;
-                    await new Promise(r => setTimeout(r, 100));
-                }
+            for (const el of allSelectTexts) {
+                const cls = (el.className || '').toString();
+                const text = (el.innerText || '').trim();
+                if (text.length < 3) continue;
                 
-                const turns = Array.from(turnsContainer.children);
+                // Determine role based on CSS classes and parent context
+                // User messages: have bg-gray-500, NOT leading-relaxed, AND parent with 'group' class
+                // Agent messages: have leading-relaxed, NOT inside task_boundary widgets
+                const isAgent = cls.includes('leading-relaxed');
+                const isUser = cls.includes('bg-gray-500') && !isAgent;
                 
-                for (let i = 0; i < turns.length; i++) {
-                    if (seenIndices.has(i) && doFullScroll) continue;
-                    const turn = turns[i];
-                    const text = (turn.innerText || '').trim();
-                    if (!text || text.length < 2) continue;
-                    
-                    seenIndices.add(i);
-                    
-                    // Determine role
-                    const hasMarkdown = !!turn.querySelector('p, pre, code, table, ul, ol, h1, h2, h3, h4, blockquote');
-                    let role = (hasMarkdown || text.length > 2000) ? 'agent' : 'user';
-                    
-                    // Clean content: remove feedback/copy buttons from HTML
-                    let contentHtml = '';
-                    const children = Array.from(turn.children);
-                    
-                    if (role === 'agent') {
-                        const contentDivs = children.filter(c => (c.innerText || '').length > 10);
-                        if (contentDivs.length > 0) {
-                            const mainContent = contentDivs.sort((a,b) => (b.innerText?.length || 0) - (a.innerText?.length || 0))[0];
-                            // Clone and remove button elements (copy, thumbs up/down, retry arrows) AND technical blocks
-                            const clone = mainContent.cloneNode(true);
-                            
-                            // Remove ALL Technical blocks (Thoughts, Tool calls, Logs) which are in <details> tags in Cline
-                            clone.querySelectorAll('details').forEach(el => el.remove());
-                            
-                            // Remove terminal output blocks which are often <div class="font-mono">
-                            clone.querySelectorAll('.font-mono, .code-block-wrapper pre').forEach(el => {
-                                const txt = (el.innerText || '').trim();
-                                if (txt.startsWith('[') && txt.includes(']')) el.remove(); 
-                            });
-
-                            // Remove ALL buttons, interactive controls, and raw icons
-                            clone.querySelectorAll('button, [role="button"], .google-symbols').forEach(el => el.remove());
-                            
-                            contentHtml = clone.innerHTML || '';
-                        } else {
-                            contentHtml = turn.innerHTML;
-                        }
+                if (isUser) {
+                    // Verify this is a real user message (parent has 'group' class, length > 20)
+                    const parentCls = (el.parentElement?.className || '').toString();
+                    if (parentCls.includes('group') && text.length > 20) {
+                        messages.push({ role: 'user', content: text, html: '' });
                     }
+                } else if (isAgent) {
                     
-                    // Also clean the text content
-                    let cleanText = text
+                    // Clone and clean agent content
+                    const clone = el.cloneNode(true);
+                    
+                    // Remove technical blocks (thoughts, tool calls, logs)
+                    clone.querySelectorAll('.isolate').forEach(n => n.remove());
+                    clone.querySelectorAll('details').forEach(n => n.remove());
+                    clone.querySelectorAll('style').forEach(n => n.remove());
+                    clone.querySelectorAll('.opacity-50:not(.text-sm)').forEach(n => n.remove());
+                    clone.querySelectorAll('button, [role="button"], .google-symbols').forEach(n => n.remove());
+                    
+                    const cleanHtml = clone.innerHTML || '';
+                    const cleanText = (clone.innerText || clone.textContent || '').trim()
                         .replace(/content_copy/g, '')
                         .replace(/thumb_up/g, '')
                         .replace(/thumb_down/g, '')
                         .trim();
                     
-                    messages.push({
-                        role,
-                        content: cleanText,
-                        html: contentHtml.substring(0, 50000),
-                    });
+                    if (cleanText.length > 20) {
+                        messages.push({ role: 'agent', content: cleanText, html: cleanHtml.substring(0, 50000) });
+                    }
                 }
-                
-                if (!doFullScroll) break;
-                
-                scrollPos += scrollStep;
-                iterations++;
-                
-                // Stop if we've scrolled past the end
-                if (scrollPos > chatScroll.scrollHeight) break;
             }
             
-            // Restore scroll position
-            if (doFullScroll) {
-                chatScroll.scrollTop = originalScroll;
-            }
-            
-            // Check if agent is currently streaming (restrict to chat area to avoid sidebar false positives)
-            const isStreaming = !!wrapper.querySelector('[class*="progress_activity"], [class*="animate-spin"], [class*="animate-pulse"]');
+            // Check if agent is currently streaming
+            const wrapper = chatScroll.children[0];
+            const isStreaming = wrapper ? !!wrapper.querySelector('[class*="progress_activity"], [class*="animate-spin"], [class*="animate-pulse"]') : false;
             
             return {
                 messages,
-                isFull: doFullScroll,
+                isFull: false,
                 isStreaming,
                 scrollInfo: {
                     scrollTop: chatScroll.scrollTop,
@@ -150,8 +92,12 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
 
             if (result.result && result.result.value && !result.result.value.error) {
                 return result.result.value;
+            } else if (result.result?.value?.error) {
+                console.error("[CDP Error]", result.result.value.error);
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error("[CDP Exception]", e);
+        }
     }
     return null;
 }
@@ -624,18 +570,23 @@ export async function getChatHistory(cdp) {
 
     const EXP = `(async () => {
         try {
-            const buttons = Array.from(document.querySelectorAll('[role="button"], button'));
-            const historyBtn = buttons.find(btn => {
-                const icon = btn.querySelector('.google-symbols');
-                return icon && icon.textContent.trim() === 'history';
-            });
+            let pills = document.querySelectorAll('[data-testid^="convo-pill-"]');
+            
+            // Si la sidebar n'est pas ouverte, on essaie de cliquer sur le bouton
+            if (pills.length === 0) {
+                const buttons = Array.from(document.querySelectorAll('[role="button"], button'));
+                const historyBtn = buttons.find(btn => {
+                    const icon = btn.querySelector('.google-symbols');
+                    return icon && icon.textContent.trim() === 'history';
+                });
 
-            if (historyBtn) {
-                historyBtn.click();
-                await new Promise(r => setTimeout(r, 1500));
+                if (historyBtn) {
+                    historyBtn.click();
+                    await new Promise(r => setTimeout(r, 1500));
+                    pills = document.querySelectorAll('[data-testid^="convo-pill-"]');
+                }
             }
 
-            const pills = document.querySelectorAll('[data-testid^="convo-pill-"]');
             const chats = [];
             
             pills.forEach(pill => {

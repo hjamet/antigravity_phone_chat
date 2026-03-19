@@ -27,7 +27,7 @@ First off, thank you for considering contributing to Antigravity Phone Connect! 
 
 1.  Clone your fork: `git clone https://github.com/krishnakanthb13/antigravity_phone_chat.git`
 2.  Install dependencies: `npm install`
-3.  **(Optional)** Generate SSL certificates: `node generate_ssl.js`
+3.  **(Optional)** Generate SSL certificates: `node scripts/generate_ssl.js`
 4.  Start Antigravity with: `antigravity . --remote-debugging-port=9000`
 5.  Run the monitor: `node server.js`
 6.  Access from phone: Use the URL shown in terminal (http or https)
@@ -49,7 +49,7 @@ First off, thank you for considering contributing to Antigravity Phone Connect! 
 | :--- | :--- |
 | `server.js` | Main server - add new API endpoints here |
 | `public/` | Mobile UI files (index.html, css/style.css, js/app.js) |
-| `generate_ssl.js` | SSL cert generator - uses pure Node.js crypto |
+| `scripts/generate_ssl.js` | SSL cert generator - uses pure Node.js crypto |
 | `certs/` | Generated SSL files - gitignored, never commit |
 | `.env.example` | Template for environment variables |
 | `SECURITY.md` | Security documentation - update for security changes |
@@ -59,7 +59,7 @@ First off, thank you for considering contributing to Antigravity Phone Connect! 
 
 ```bash
 # Generate certificates
-node generate_ssl.js
+node scripts/generate_ssl.js
 
 # Restart server - should show "🔒 HTTPS enabled"
 node server.js

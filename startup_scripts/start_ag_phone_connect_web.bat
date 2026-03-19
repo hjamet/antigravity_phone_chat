@@ -2,8 +2,8 @@
 setlocal enabledelayedexpansion
 title Antigravity Phone Connect - WEB MODE
 
-:: Navigate to script directory
-cd /d "%~dp0"
+:: Navigate to project root (one level up from startup_scripts/)
+cd /d "%~dp0.."
 
 echo ===================================================
 echo   Antigravity Phone Connect - WEB ACCESS MODE
@@ -89,7 +89,7 @@ if "%ERRORLEVEL%" neq "0" (
 :: 7. Launch everything via Python
 echo [1/1] Launching Antigravity Phone Connect...
 echo (This will start both the server and the Cloudflare tunnel)
-python launcher.py --mode web
+python startup_scripts/launcher.py --mode web
 
 :: 7. Auto-close when done
 exit

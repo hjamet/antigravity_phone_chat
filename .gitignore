@@ -43,6 +43,7 @@ registry/
 
 # Scratch / Temporary snapshots
 scratch/
+debug/
 
 # Cursor Memory Bank
 .cursor/mcp

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Antigravity Phone Connect - Mac/Linux Launcher
-echo "==================================================="
+# Navigate to project root (one level up from startup_scripts/)
+cd "$(dirname "$0")/.."
 echo "  Antigravity Phone Connect Launcher"
 echo "==================================================="
 
@@ -41,7 +41,7 @@ if ! lsof -i:9000 > /dev/null; then
 fi
 
 echo "[STARTING] Launching via Unified Launcher..."
-$PYTHON_CMD launcher.py --mode local
+$PYTHON_CMD startup_scripts/launcher.py --mode local
 
 # Keep terminal open if server crashes
 echo ""

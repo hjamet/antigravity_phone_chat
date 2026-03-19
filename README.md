@@ -38,22 +38,23 @@ L'application agit comme un proxy intelligent :
 | Mode/Model Sync | ✅ Stable | Agent Manager CDP |
 
 ## 6. # Documentation Index
-| Titre (Lien) | Description |
-|--------------|-------------|
 | [Index des Tâches](docs/index_tasks.md) | Liste exhaustive des spécifications et de la roadmap |
-| [Architecture](CODE_DOCUMENTATION.md) | Détails techniques du flux de données |
+| [Index Doc](docs/index_docs.md) | Index de la documentation technique et de design |
+| [Architecture](docs/architecture/code_documentation.md) | Détails techniques du flux de données |
 
 ## 7. # Plan du repo
 ```text
 .
 ├── src/
-│   ├── cdp/            # Scripts d'injection CDP modularisés
+│   ├── cdp/            # Scripts d'injection CDP modularisés (dont ui_inspector.js)
 │   └── server/         # Logique serveur (Routes & WebSockets)
 ├── public/
 │   └── js/             # Frontend modulaire (ESM)
-├── certs/              # Certificats SSL auto-signés
-├── server.js           # Serveur de bridge (EntryPoint - Bootstrap)
-└── startup_scripts/    # Utilitaires de lancement
+├── docs/               # Documentation détaillée et spécifications
+├── scripts/            # Utilitaires Node.js (dont generate_ssl.js)
+├── startup_scripts/    # Scripts de lancement (.bat, .sh, launcher.py)
+├── certs/              # Certificats SSL auto-signés (gitignored)
+└── server.js           # Serveur de bridge (EntryPoint - Bootstrap)
 ```
 
 ## 8. # Scripts d'entrée principaux
@@ -65,8 +66,8 @@ L'application agit comme un proxy intelligent :
 ## 9. # Scripts exécutables secondaires
 | Commande | Description |
 |----------|-------------|
-| `node generate_ssl.js` | Génère les certificats HTTPS |
-| `python bridge_tunnel.py` | (Optionnel) Lance le tunnel Cloudflare |
+| `node scripts/generate_ssl.js` | Génère les certificats HTTPS |
+| `python startup_scripts/launcher.py` | Lance le gestionnaire de pont (Supervisor) |
 
 ## 10. # Roadmap
 | # | Tâche | Statut | Spec |
@@ -81,7 +82,7 @@ L'application agit comme un proxy intelligent :
 | 8 | **Refactoring Structurel** | ✅ Fait | [structural-refactoring.md](docs/tasks/structural-refactoring.md) |
 | 9 | **Migration Agent Manager** | ✅ Fait | [agent-manager-refactoring.md](docs/tasks/agent-manager-refactoring.md) |
 | 10 | **Extraction Routes Express** | ✅ Fait | [extract-express-routes.md](docs/tasks/extract-express-routes.md) |
-| 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
+| 11 | **Nettoyage Repo & Alignement** | ✅ Fait | [repo-cleanup.md](docs/tasks/repo-cleanup.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

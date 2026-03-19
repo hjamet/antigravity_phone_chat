@@ -11,7 +11,7 @@ import os from 'os';
 import WebSocket from 'ws';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { inspectUI } from './ui_inspector.js';
+import { inspectUI } from './src/cdp/ui_inspector.js';
 import { execSync } from 'child_process';
 
 // Modular CDP Scripts

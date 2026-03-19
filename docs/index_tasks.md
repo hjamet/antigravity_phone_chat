@@ -6,6 +6,7 @@
 | [Refactoring Structurel](tasks/structural-refactoring.md) | Modularisation et nettoyage massif de l'architecture | 2026-03-19 | `Up to date` |
 | [Migration Agent Manager](tasks/agent-manager-refactoring.md) | Migration complète vers l'Agent Manager | 2026-03-19 | `Up to date` |
 | [Extraction Routes Express](tasks/extract-express-routes.md) | Extraction des routes REST et WebSocket de server.js | 2026-03-19 | `Up to date` |
+| [Nettoyage Repo & Alignement](tasks/repo-cleanup.md) | Ranger la racine, déplacer scripts, aligner README | 2026-03-19 | `Up to date` |
 | [Auto-Launch Launchpad](tasks/auto-launch-launchpad.md) | Lancement automatique de l'Agent Manager | 2025-01-01 | `Legacy` |
 | [Agent Manager Bridge](tasks/agent-manager-bridge.md) | Pont CDP pour les workspaces | 2025-01-01 | `Legacy` |
 | [Create/Open Workspace](tasks/create-open-workspace.md) | Commandes de gestion de dossiers | 2025-01-01 | `Legacy` |

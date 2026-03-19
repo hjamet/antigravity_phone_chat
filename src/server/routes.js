@@ -82,7 +82,7 @@ export function setupRoutes(app, {
     router.post('/generate-ssl', async (req, res) => {
         try {
             const { execSync } = await import('child_process');
-            execSync('node generate_ssl.js', { cwd: __dirname, stdio: 'pipe' });
+            execSync('node scripts/generate_ssl.js', { cwd: __dirname, stdio: 'pipe' });
             res.json({
                 success: true,
                 message: 'SSL certificates generated! Restart the server to enable HTTPS.'

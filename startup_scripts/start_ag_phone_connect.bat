@@ -2,8 +2,8 @@
 setlocal enabledelayedexpansion
 title Antigravity Phone Connect
 
-:: Navigate to the script's directory
-cd /d "%~dp0"
+:: Navigate to project root (one level up from startup_scripts/)
+cd /d "%~dp0.."
 
 :: Check for .env file
 if not exist ".env" (
@@ -38,7 +38,7 @@ if "%ERRORLEVEL%" neq "0" (
 )
 
 echo [STARTING] Launching via Unified Launcher...
-python launcher.py --mode local
+python startup_scripts/launcher.py --mode local
 
 :: Keep window open if server crashes
 echo.

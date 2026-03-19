@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Navigate to script directory
-cd "$(dirname "$0")"
+# Navigate to project root (one level up from startup_scripts/)
+cd "$(dirname "$0")/.."
 
 echo "==================================================="
 echo "  Antigravity Phone Connect - WEB ACCESS MODE"
@@ -77,7 +77,7 @@ fi
 # 7. Launch everything via Python
 echo "[1/1] Launching Antigravity Phone Connect..."
 echo "(This will start both the server and the Cloudflare tunnel)"
-python3 launcher.py --mode web
+python3 startup_scripts/launcher.py --mode web
 
 # 7. Auto-close when done
 exit 0

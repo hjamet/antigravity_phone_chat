@@ -37,7 +37,7 @@ show_menu() {
 NAUTILUS_PATH="$HOME/.local/share/nautilus/scripts"
 SCRIPT_FILE="$NAUTILUS_PATH/Open with Antigravity (Debug)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_DIR="$SCRIPT_DIR/registry"
+BACKUP_DIR="$SCRIPT_DIR/../registry"
 
 while true; do
     show_menu

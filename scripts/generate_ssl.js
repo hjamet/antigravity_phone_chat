@@ -16,7 +16,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const certsDir = path.join(__dirname, 'certs');
+const certsDir = path.join(__dirname, '..', 'certs');
 
 // Create certs directory if it doesn't exist
 if (!fs.existsSync(certsDir)) {

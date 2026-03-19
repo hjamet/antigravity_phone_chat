@@ -74,7 +74,8 @@ L'application agit comme un proxy intelligent :
 | 5 | **Chat History enrichi** | ✅ Fait | [chat-history-ui.md](docs/tasks/chat-history-ui.md) |
 | 6 | Cleanup UI Mobile | ✅ Fait | [cleanup-ui-mobile.md](docs/tasks/cleanup-ui-mobile.md) |
 | 7 | Interface Projets Mobile | ✅ Fait | [project-selector-ui.md](docs/tasks/project-selector-ui.md) |
-| 8 | **Refactoring complet** | 🟡 À faire | [agent-manager-refactoring.md](docs/tasks/agent-manager-refactoring.md) |
+| 8 | **Refactoring Structurel** | 🟡 À faire | [structural-refactoring.md](docs/tasks/structural-refactoring.md) |
+| 9 | **Refactoring complet** | 🟡 À faire | [agent-manager-refactoring.md](docs/tasks/agent-manager-refactoring.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

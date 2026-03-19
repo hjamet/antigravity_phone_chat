@@ -3,6 +3,7 @@
 | Titre de la note | Courte Description | Dernière modif | Tag |
 |------------------|-------------------|----------------|-----|
 | [Chat History UI](tasks/chat-history-ui.md) | Amélioration du panneau d'historique (Manager CDP) | 2026-03-19 | `Up to date` |
+| [Refactoring Structurel](tasks/structural-refactoring.md) | Modularisation et nettoyage massif de l'architecture | 2026-03-19 | `Up to date` |
 | [Refactoring Manager](tasks/agent-manager-refactoring.md) | Migration complète vers l'Agent Manager | 2026-03-19 | `Up to date` |
 | [Auto-Launch Launchpad](tasks/auto-launch-launchpad.md) | Lancement automatique de l'Agent Manager | 2025-01-01 | `Legacy` |
 | [Agent Manager Bridge](tasks/agent-manager-bridge.md) | Pont CDP pour les workspaces | 2025-01-01 | `Legacy` |

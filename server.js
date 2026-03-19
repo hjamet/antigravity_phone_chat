@@ -129,10 +129,14 @@ async function discoverCDP() {
             }
 
             // Find Jetski/Launchpad (Agent Manager)
+            // Prioritize target titled "Manager" as it contains the full history and workspaces
+            const manager = list.find(t => t.title === 'Manager');
             const jetski = list.find(t => t.url?.includes('jetski') || t.title === 'Launchpad' || t.title?.includes('Agent Manager'));
-            if (jetski && jetski.webSocketDebuggerUrl && !targets.launchpad) {
-                console.log('Found Launchpad target:', jetski.title, `on port ${port}`);
-                targets.launchpad = { port, url: jetski.webSocketDebuggerUrl };
+            const target = manager || jetski;
+
+            if (target && target.webSocketDebuggerUrl && !targets.launchpad) {
+                console.log('Found Agent Manager target:', target.title, `on port ${port}`);
+                targets.launchpad = { port, url: target.webSocketDebuggerUrl };
             }
             
             if (targets.workbench && targets.launchpad) break; // Found both
@@ -919,192 +923,93 @@ async function startNewChat() {
     }
     return { error: 'Context failed' };
 }
-// Get Chat History - Click history button and scrape conversations
-async function getChatHistory() {
-    if (!cdpConnections.workbench) throw new Error("Not connected to CDP");
+// Get Chat History from Agent Manager (Manager target)
+async function getChatHistoryFromManager() {
+    if (!cdpConnections.launchpad) throw new Error("Agent Manager not connected");
+
+    console.log('📜 Requesting chat history from Agent Manager...');
 
     const EXP = `(async () => {
         try {
-            const chats = [];
-            const seenTitles = new Set();
-
-            // Priority 1: Look for tooltip ID pattern (history/past/recent)
-            let historyBtn = document.querySelector('[data-tooltip-id*="history"], [data-tooltip-id*="past"], [data-tooltip-id*="recent"], [data-tooltip-id*="conversation-history"]');
-            
-            // Priority 2: Look for button ADJACENT to the new chat button
-            if (!historyBtn) {
-                const newChatBtn = document.querySelector('[data-tooltip-id="new-conversation-tooltip"]');
-                if (newChatBtn) {
-                    const parent = newChatBtn.parentElement;
-                    if (parent) {
-                        const siblings = Array.from(parent.children).filter(el => el !== newChatBtn);
-                        historyBtn = siblings.find(el => el.tagName === 'A' || el.tagName === 'BUTTON' || el.getAttribute('role') === 'button');
-                    }
-                }
-            }
-
-            // Fallback: Use previous heuristics (icon/aria-label)
-            if (!historyBtn) {
-                const allButtons = Array.from(document.querySelectorAll('button, [role="button"], a[data-tooltip-id]'));
-                for (const btn of allButtons) {
-                    if (btn.offsetParent === null) continue;
-                    const hasHistoryIcon = btn.querySelector('svg.lucide-clock') ||
-                                           btn.querySelector('svg.lucide-history') ||
-                                           btn.querySelector('svg.lucide-folder') ||
-                                           btn.querySelector('svg[class*="clock"]') ||
-                                           btn.querySelector('svg[class*="history"]');
-                    if (hasHistoryIcon) {
-                        historyBtn = btn;
-                        break;
-                    }
-                }
-            }
-            
-            if (!historyBtn) {
-                return { error: 'History button not found', chats: [] };
-            }
-
-            // Click and Wait
-            historyBtn.click();
-            await new Promise(r => setTimeout(r, 2000));
-            
-            // Find the side panel
-            let panel = null;
-            let inputsFoundDebug = [];
-            
-            // Strategy 1: The search input has specific placeholder
-            let searchInput = null;
-            const inputs = Array.from(document.querySelectorAll('input'));
-            searchInput = inputs.find(i => {
-                const ph = (i.placeholder || '').toLowerCase();
-                return ph.includes('select') || ph.includes('conversation');
+            // 1. Open the history panel by clicking the history icon if needed
+            const buttons = Array.from(document.querySelectorAll('[role="button"], button'));
+            const historyBtn = buttons.find(btn => {
+                const icon = btn.querySelector('.google-symbols');
+                return icon && icon.textContent.trim() === 'history';
             });
-            
-            // Strategy 2: Look for any text input that looks like a search bar (based on user snippet classes)
-            if (!searchInput) {
-                const allInputs = Array.from(document.querySelectorAll('input[type="text"]'));
-                inputsFoundDebug = allInputs.map(i => 'ph:' + i.placeholder + ', cls:' + i.className);
-                
-                searchInput = allInputs.find(i => 
-                    i.offsetParent !== null && 
-                    (i.className.includes('w-full') || i.classList.contains('w-full'))
-                );
-            }
-            
-            // Strategy 3: Find known text in the panel (Anchor Text Strategy)
-            let anchorElement = null;
-            if (!searchInput) {
-                 const allSpans = Array.from(document.querySelectorAll('span, div, p'));
-                 anchorElement = allSpans.find(s => {
-                     const t = (s.innerText || '').trim();
-                     return t === 'Current' || t === 'Refining Chat History Scraper'; // specific known title
-                 });
+
+            if (historyBtn) {
+                historyBtn.click();
+                await new Promise(r => setTimeout(r, 1500));
             }
 
-            const startElement = searchInput || anchorElement;
+            // 2. Scrape conversations from the sidebar and search results
+            // We use the data-testid pattern found in exploration
+            const pills = document.querySelectorAll('[data-testid^="convo-pill-"]');
+            const chats = [];
+            
+            pills.forEach(pill => {
+                const title = pill.textContent?.trim() || '';
+                const id = pill.getAttribute('data-testid')?.replace('convo-pill-', '') || '';
+                
+                // Find containing button to get relative elements
+                const container = pill.closest('button');
+                let time = '';
+                let isActive = false;
+                
+                if (container) {
+                    // Find timestamp (text-xs opacity-50)
+                    const timeSpans = Array.from(container.querySelectorAll('span.text-xs'));
+                    const timeSpan = timeSpans.find(s => {
+                        const t = s.textContent?.trim();
+                        // Format is usually "now", "2m", "1h", "1d"
+                        return t && (t === 'now' || /\\d+[mhdw]/.test(t));
+                    });
+                    if (timeSpan) time = timeSpan.textContent.trim();
+                    
+                    // Check for active state (progress_activity icon)
+                    container.querySelectorAll('.google-symbols').forEach(icon => {
+                        if (icon.textContent?.trim() === 'progress_activity') isActive = true;
+                    });
+                }
+                
+                // Find Workspace (header in the sidebar section)
+                let workspace = 'Other';
+                const section = pill.closest('.flex.flex-col.gap-px');
+                if (section) {
+                    const header = section.querySelector('span.text-sm.font-medium');
+                    if (header) workspace = header.textContent.trim();
+                }
 
-            if (startElement) {
-                // Walk up to find the panel container
-                let container = startElement;
-                for (let i = 0; i < 15; i++) { 
-                    if (!container.parentElement) break;
-                    container = container.parentElement;
-                    const rect = container.getBoundingClientRect();
-                    
-                    // Panel should have good dimensions
-                    // Relaxed constraints for mobile
-                    if (rect.width > 50 && rect.height > 100) {
-                        panel = container;
-                        
-                        // If it looks like a modal/popover (fixed or absolute pos), that's definitely it
-                        const style = window.getComputedStyle(container);
-                        if (style.position === 'fixed' || style.position === 'absolute' || style.zIndex > 10) {
-                            break;
-                        }
-                    }
+                if (title.length > 2) {
+                    chats.push({ 
+                        title, 
+                        id, 
+                        time: time || 'Recent', 
+                        isActive, 
+                        workspace 
+                    });
                 }
-                
-                // Fallback if loop finishes without specific break
-                if (!panel && startElement) {
-                     // Just go up 4 levels
-                     let p = startElement;
-                     for(let k=0; k<4; k++) { if(p.parentElement) p = p.parentElement; }
-                     panel = p;
-                }
-            }
-            
-            const debugInfo = { 
-                panelFound: !!panel, 
-                panelWidth: panel?.offsetWidth || 0,
-                inputFound: !!searchInput,
-                anchorFound: !!anchorElement,
-                inputsDebug: inputsFoundDebug.slice(0, 5)
-            };
-            
-            if (panel) {
-                // Chat titles are in <span> elements
-                const spans = Array.from(panel.querySelectorAll('span'));
-                
-                // Section headers to skip
-                const SKIP_EXACT = new Set([
-                    'current', 'other conversations', 'now'
-                ]);
-                
-                for (const span of spans) {
-                    const text = span.textContent?.trim() || '';
-                    const lower = text.toLowerCase();
-                    
-                    // Skip empty or too short
-                    if (text.length < 3) continue;
-                    
-                    // Skip section headers
-                    if (SKIP_EXACT.has(lower)) continue;
-                    if (lower.startsWith('recent in ')) continue;
-                    if (lower.startsWith('show ') && lower.includes('more')) continue;
-                    
-                    // Skip timestamps
-                    if (lower.endsWith(' ago') || /^\\d+\\s*(sec|min|hr|day|wk|mo|yr)/i.test(lower)) continue;
-                    
-                    // Skip very long text (containers)
-                    if (text.length > 100) continue;
-                    
-                    // Skip duplicates
-                    if (seenTitles.has(text)) continue;
-                    
-                    seenTitles.add(text);
-                    chats.push({ title: text, date: 'Recent' });
-                    
-                    if (chats.length >= 50) break;
-                }
-            }
-            
-            // Note: Panel is left open on PC as requested ("launch history on pc")
+            });
 
-            return { success: true, chats: chats, debug: debugInfo };
-        } catch(e) {
+            return { success: true, chats };
+        } catch (e) {
             return { error: e.toString(), chats: [] };
         }
     })()`;
 
-    let lastError = null;
-    for (const ctx of cdpConnections.workbench.contexts) {
+    for (const ctx of cdpConnections.launchpad.contexts) {
         try {
-            const res = await cdpConnections.workbench.call("Runtime.evaluate", {
+            const res = await cdpConnections.launchpad.call("Runtime.evaluate", {
                 expression: EXP,
                 returnByValue: true,
                 awaitPromise: true,
                 contextId: ctx.id
             });
             if (res.result?.value) return res.result.value;
-            // If result.value is null/undefined but no error thrown, check exceptionDetails
-            if (res.exceptionDetails) {
-                lastError = res.exceptionDetails.exception?.description || res.exceptionDetails.text;
-            }
-        } catch (e) {
-            lastError = e.message;
-        }
+        } catch (e) { }
     }
-    return { error: 'Context failed: ' + (lastError || 'No contexts available'), chats: [] };
+    return { error: 'Context failed or target unavailable', chats: [] };
 }
 
 async function selectChat(chatTitle) {
@@ -2264,7 +2169,7 @@ async function main() {
 
         // Get Chat History
         app.get('/chat-history', async (req, res) => {
-            const result = await getChatHistory();
+            const result = await getChatHistoryFromManager();
             res.json(result);
         });
 

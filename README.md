@@ -1,240 +1,81 @@
-<div align="center">
-  <img src="./assets/antigravity.png" alt="Antigravity Phone Connect" width="300">
-  <h1>Antigravity Phone Connect 📱</h1>
-</div>
+# Antigravity Phone Connect 📱
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+Un pont de contrôle à distance pour l'application de bureau Antigravity, permettant d'accéder à vos sessions IA depuis votre téléphone via un tunnel sécurisé.
 
-**Antigravity Phone Connect** is a high-performance, real-time mobile monitor and remote control for your Antigravity AI sessions. It allows you to step away from your desk while keeping full sight and control over your AI's thinking process and generations.
+## 1. Présentation
+Antigravity Phone Connect transforme votre smartphone en un "viewport sans fil" pour votre instance Antigravity Desktop. Il utilise le protocole CDP pour miroir l'interface, permettant d'envoyer des messages, changer de modèle, et consulter l'historique sans exposer vos jetons d'authentification ou vos APIs directement sur le web.
 
-![Antigravity Phone Connect](./assets/global_access_hero_2.png)
-
-**Note:** This project is a refined fork/extension based on the original [Antigravity Shit-Chat](https://github.com/gherghett/Antigravity-Shit-Chat) by gherghett.
-
----
-
-## 🚀 Quick Start
-
-> 💡 **Tip:** While we recommend starting Antigravity first, the server is now smart enough to wait and automatically connect whenever Antigravity becomes available!
-
-### Step 1: Launch Antigravity in Debug Mode
-
-> 💡 **NEW (Auto-Launch):** The launcher scripts will now **automatically start Antigravity** in debug mode for you! Just run the script. If Antigravity isn't already running, it will open it automatically.
-
-If you prefer to start it manually:
-
-**Option A: Using Right-Click Context Menu (Recommended)**
-- Run `install_context_menu.bat` (Windows) or `./install_context_menu.sh` (Linux) and select **[1] Install**
-- Then right-click any project folder → **"Open with Antigravity (Debug)"** (now with visual icons!)
-
-**Option B: Manual Command**
+## 2. # Installation
 ```bash
-antigravity . --remote-debugging-port=9000
+npm install
+node server.js
+```
+*Pré-requis : Antigravity Desktop lancé avec `--remote-debugging-port=9000`.*
+
+## 3. # Configuration
+Les variables d'environnement sont gérées dans le fichier `.env` :
+
+| Variable | Description |
+|----------|-------------|
+| `APP_PASSWORD` | Mot de passe pour l'accès mobile |
+| `CLOUDFLARE_TUNNEL_ID` | UUID de votre tunnel Cloudflare |
+| `TUNNEL_PUBLIC_URL` | URL publique de votre interface |
+| `PORT` | Port local (défaut: 3000) |
+
+## 4. # Description détaillée
+L'application agit comme un proxy intelligent :
+- **Backend (Node.js)** : Se connecte aux instances CDP (Workbench & Agent Manager), capture l'état des conversations et injecte les commandes utilisateur.
+- **Tunneling (Cloudflare)** : Expose l'interface mobile via un tunnel sécurisé avec mot de passe.
+- **Frontend (Vanilla JS)** : Interface mobile réactive optimisée pour l'interaction tactile.
+
+## 5. # Principaux résultats
+| Feature | État | Source de vérité |
+|---------|------|------------------|
+| Chat Reflection | ✅ Stable | Workbench CDP |
+| Chat History | ✅ Enrichi | Agent Manager CDP |
+| Project Selector | ✅ Stable | Agent Manager CDP |
+| Mode/Model Sync | ✅ Stable | Workbench CDP |
+
+## 6. # Documentation Index
+| Titre (Lien) | Description |
+|--------------|-------------|
+| [Index des Tâches](docs/index_tasks.md) | Liste exhaustive des spécifications et de la roadmap |
+| [Architecture](CODE_DOCUMENTATION.md) | Détails techniques du flux de données |
+
+## 7. # Plan du repo
+```text
+.
+├── docs/               # Documentation détaillée et spécifications
+├── public/             # Frontend (HTML, CSS, JS)
+├── certs/              # Certificats SSL auto-signés
+├── server.js           # Serveur Express & Logique CDP
+└── startup_scripts/    # Utilitaires de lancement
 ```
 
-### Step 2: Open or Start a Chat
+## 8. # Scripts d'entrée principaux
+| Commande | Description |
+|----------|-------------|
+| `node server.js` | Lance le serveur de bridge local |
+| `npm run dev` | Mode développement avec rechargement |
 
-- In Antigravity, open an **existing chat** from the bottom-right panel, **OR**
-- Start a **new chat** by typing a message
+## 9. # Scripts exécutables secondaires
+| Commande | Description |
+|----------|-------------|
+| `node generate_ssl.js` | Génère les certificats HTTPS |
+| `python bridge_tunnel.py` | (Optionnel) Lance le tunnel Cloudflare |
 
-> 💡 The server needs an active chat session to capture snapshots. Without this, you'll see "chat container not found" errors.
-
-### Step 3: Run the Server
-
-**Windows:**
-```
-Double-click start_ag_phone_connect.bat
-```
-
-**macOS / Linux:**
-```bash
-chmod +x start_ag_phone_connect.sh   # First time only
-./start_ag_phone_connect.sh
-```
-
-The script will:
-- Verify Node.js and Python dependencies
-- Auto-kill any existing server on port 3000
-- **Wait for Antigravity** if it's not started yet
-- Display a **QR Code** and your **Link** (e.g., `https://192.168.1.5:3000`)
-- Provide numbered steps for easy connection
-
-### Step 4: Connect Your Phone (Local Wi-Fi)
-
-1. Ensure your phone is on the **same Wi-Fi network** as your PC
-2. Open your mobile browser and enter the **URL shown in the terminal**
-3. If using HTTPS: Accept the self-signed certificate warning on first visit
-
----
-
-## 🌍 NEW: Global Remote Access (Web Mode)
-
-Access your Antigravity session from **anywhere in the world** (Mobile Data, outside Wi-Fi) with secure passcode protection, powered by **Cloudflare Tunnel**.
-
-### Setup (First Time)
-1. **Install cloudflared**: Download from the [Cloudflare Tunnel downloads page](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
-2. **Create a Tunnel**: Follow the [Cloudflare Tunnel guide](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) to create a named tunnel pointing to `http://localhost:3000`.
-3. **Configure `.env`**: Copy `.env.example` to `.env` and fill in your details:
-   ```bash
-   copy .env.example .env   # Windows
-   cp .env.example .env     # Mac/Linux
-   ```
-   Update the `.env` file:
-   ```env
-   CLOUDFLARE_TUNNEL_ID=your-tunnel-id
-   TUNNEL_PUBLIC_URL=https://your-domain.example.com
-   APP_PASSWORD=your_secure_passcode
-   PORT=3000
-   ```
-
-### Usage
-- **Windows**: Run `start_ag_phone_connect_web.bat`
-- **Mac/Linux**: Run `./start_ag_phone_connect_web.sh`
-
-The script will launch the server and start the Cloudflare tunnel, providing your **stable public URL**.
-
-**Two Ways to Connect:**
-1. **Magic Link (Easiest)**: Scan the **Magic QR Code** displayed in the terminal. It logs you in automatically!
-2. **Manual**: 
-   - Open your configured domain URL on your phone.
-   - Enter your `APP_PASSWORD` to log in.
-
-> 💡 **Tip:** Devices on the same local Wi-Fi still enjoy direct access without needing a password.
-
----
-
-## 🔒 Enabling HTTPS (Recommended)
-
-For a secure connection without the browser warning icon:
-
-### Option 1: Command Line
-```bash
-node generate_ssl.js
-```
-- Uses **OpenSSL** if available (includes your IP in certificate)
-- Falls back to **Node.js crypto** if OpenSSL not found
-- Creates certificates in `./certs/` directory
-
-### Option 2: Web UI
-1. Start the server on HTTP
-2. Look for the yellow **"⚠️ Not Secure"** banner
-3. Click **"Enable HTTPS"** button
-4. Restart the server when prompted
-
-### After Generating:
-1. **Restart the server** - it will automatically detect and use HTTPS.
-2. **On your phone's first visit**:
-   - You'll see a security warning (normal for self-signed certs).
-   - Tap **"Advanced"** → **"Proceed to site"**.
-   - The warning won't appear again!
-
----
-
-### macOS: Adding Right-Click "Quick Action" (Optional)
-
-Since macOS requires Automator for context menu entries, follow these steps manually:
-
-1.  Open **Automator** (Spotlight → type "Automator").
-2.  Click **File → New** and select **Quick Action**.
-3.  At the top, set:
-    - "Workflow receives current" → **folders**
-    - "in" → **Finder**
-4.  In the left sidebar, search for **"Run Shell Script"** and drag it to the right pane.
-5.  Set "Shell" to `/bin/zsh` and "Pass input" to **as arguments**.
-6.  Paste this script:
-    ```bash
-    cd "$1"
-    antigravity . --remote-debugging-port=9000
-    ```
-7.  **Save** the Quick Action with a name like `Open with Antigravity (Debug)`.
-8.  Now you can right-click any folder in Finder → **Quick Actions → Open with Antigravity (Debug)**.
-
----
-
-## 🏗️ Architecture Infographic
-
-![Repo Infographic](./assets/repo_infographic.png)
-
----
-
-## 🛡️ Shielding & Account Safety
-
-This tool is designed with a **"Local-First"** security model. 
-
-- **Bridge Mechanism**: It uses the **Chrome DevTools Protocol (CDP)** to mirror the UI of your *already-running* desktop session. It **never** extracts OAuth tokens or interacts with Google/AI-provider APIs directly.
-- **Natural Traffic**: All AI requests are still sent by your official desktop application. To the AI provider, your usage looks identical to normal desktop activity.
-- **Zero Bans**: There have been **no reports** of account flags or bans. This is a "Wireless Viewport," not a third-party client that bypasses official security.
-
----
-
-## ✨ Features
-
-- **🧹 Clean Mobile View (NEW!)**: Automatically filters out "Review Changes" bars, "Linked Objects," and Desktop-specific input areas to keep your phone view focused purely on the chat and code content.
-- **Glassmorphism UI (NEW!)**: Sleek and modern quick-action and settings menus featuring a beautiful glassmorphism effect for enhanced mobile usability. Includes customizable, ready-to-use prompt pills (like "Explain this code", "Continue", and "Fix Bugs").
-- **🌙 Improved Dark Mode (NEW!)**: Enhanced UI styling and state capture designed to provide maximum clarity and correct model detection in dark mode.
-- **🧠 Latest AI Models**: Automatically updated support for the latest model versions from Gemini, Claude, and OpenAI.
-- **📜 Premium Chat History (NEW!)**: Full-screen history management with a completely redesigned, sleek card-based UI. Features modern loading states, gorgeous gradients, and intelligent strictly-scoped scraping to safely extract past conversations without background noise. Dismissing the history view automatically triggers a remote Escape sequence on the desktop to keep your workspace clean.
-- **➕ One-Tap New Chat (NEW!)**: Start a fresh conversation instantly from your phone without needing to touch your desktop.
-- **🖼️ Context Menu Icons (NEW!)**: Visual icons in the right-click menu for better navigation.
-- **🌍 Global Web Access**: Secure remote access via Cloudflare Tunnel. Access your AI from mobile data with passcode protection.
-- **🛡️ Auto-Cleanup**: Launchers now automatically sweep away "ghost" processes from previous sessions for a clean start every time.
-- **🔒 HTTPS Support**: Secure connections with self-signed SSL certificates.
-- **Local Image Support**: Local images and SVGs (`vscode-file://` paths) in the desktop chat are automatically converted to Base64 so they render perfectly on mobile without exposing local files.
-- **Real-Time Mirroring**: 1-second polling interval for near-instant sync.
-- **Remote Control**: Send messages, stop generations, and switch Modes (Fast/Planning) or Models (Gemini/Claude/GPT) directly from your phone.
-- **Scroll Sync**: When you scroll on your phone, the desktop Antigravity scrolls too!
-- **🎯 Precision Remote Control (NEW!)**: A deterministic targeting layer that prevents "Sync-Fighting". It uses leaf-node filtering to ensure clicks land exactly on buttons, even when nested inside complex DOM structures.
-- **Occurrence Index Tracking**: Robustly handles multiple identical elements (like three "Run" buttons in history) by tracking the specific tapped instance.
-- **Thought Expansion**: Tap on "Thinking..." or "Thought" blocks on your phone to remotely expand/collapse them with first-line text matching.
-- **Smart Sync**: Bi-directional synchronization ensures your phone always shows the current Model and Mode selected on your desktop.
-- **Premium Mobile UI**: A sleek, dark-themed interface optimized for touch interaction.
-- **Context Menu Management**: Dedicated scripts to **Install, Remove, Restart, or Backup** your Right-Click integrations.
-- **Health Monitoring**: Built-in `/health` endpoint for server status checks.
-- **Graceful Shutdown**: Clean exit on Ctrl+C, closing all connections properly.
-- **Zero-Config**: The launch scripts handle the heavy lifting of environment setup.
-
----
-
-## 🛣️ Roadmap
-
+## 10. # Roadmap
 | # | Tâche | Statut | Spec |
 |---|-------|--------|------|
-| 1 | Auto-lancement du Launchpad — Ouvrir l'Agent Manager automatiquement au boot | ✅ Fait | [auto-launch-launchpad.md](docs/tasks/auto-launch-launchpad.md) |
-| 2 | Pont CDP Agent Manager — Lister et ouvrir des projets via le Launchpad | ✅ Fait | [agent-manager-bridge.md](docs/tasks/agent-manager-bridge.md) |
-| 3 | Création de Projet — Ouvrir un workspace via File > Open Workspace | ✅ Fait | [create-open-workspace.md](docs/tasks/create-open-workspace.md) |
-| 4 | Chat dans un Projet — Start new conversation + sélecteur de projet | ✅ Fait | [chat-in-project.md](docs/tasks/chat-in-project.md) |
-| 5 | Historique Récent — Chat history amélioré | 🟡 À faire | [chat-history-ui.md](docs/tasks/chat-history-ui.md) |
-| 6 | Cleanup UI Mobile — Supprimer quick-actions, améliorer le responsive | ✅ Fait | [cleanup-ui-mobile.md](docs/tasks/cleanup-ui-mobile.md) |
-| 7 | Interface Projets Mobile — Sélecteur de projets dans la webapp | ✅ Fait | [project-selector-ui.md](docs/tasks/project-selector-ui.md) |
-| 🔮 | Transcription Vocale — Dicter ses messages depuis le mobile | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
+| 1 | Auto-lancement Manager | ✅ Fait | [auto-launch-launchpad.md](docs/tasks/auto-launch-launchpad.md) |
+| 2 | Pont CDP Manager | ✅ Fait | [agent-manager-bridge.md](docs/tasks/agent-manager-bridge.md) |
+| 3 | Gestion de Workspace | ✅ Fait | [create-open-workspace.md](docs/tasks/create-open-workspace.md) |
+| 4 | Chat par Projet | ✅ Fait | [chat-in-project.md](docs/tasks/chat-in-project.md) |
+| 5 | **Chat History enrichi** | ✅ Fait | [chat-history-ui.md](docs/tasks/chat-history-ui.md) |
+| 6 | Cleanup UI Mobile | ✅ Fait | [cleanup-ui-mobile.md](docs/tasks/cleanup-ui-mobile.md) |
+| 7 | Interface Projets Mobile | ✅ Fait | [project-selector-ui.md](docs/tasks/project-selector-ui.md) |
+| 8 | **Refactoring complet** | 🟡 À faire | [agent-manager-refactoring.md](docs/tasks/agent-manager-refactoring.md) |
+| 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---
-
-## 📂 Documentation
-
-For more technical details, check out:
-- [**Code Documentation**](CODE_DOCUMENTATION.md) - Architecture, Data Flow, and API.
-- [**Security Guide**](SECURITY.md) - HTTPS setup, certificate warnings, and security model.
-- [**Design Philosophy**](DESIGN_PHILOSOPHY.md) - Why it was built this way.
-- [**Contributing**](CONTRIBUTING.md) - Guidelines for developers.
-
----
-
-## License
-
-Licensed under the [GNU GPL v3](LICENSE).  
-Copyright (C) 2026 **Krishna Kanth B** (@krishnakanthb13)
-
----
-
-## Star History
-
-<a href="https://www.star-history.com/#krishnakanthb13/antigravity_phone_chat&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=krishnakanthb13/antigravity_phone_chat&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=krishnakanthb13/antigravity_phone_chat&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=krishnakanthb13/antigravity_phone_chat&type=date&legend=top-left" />
- </picture>
-</a>
-
----
+*Licensed under GNU GPL v3. Copyright (C) 2026 Krishna Kanth B.*

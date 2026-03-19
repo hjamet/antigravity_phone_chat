@@ -26,8 +26,8 @@ const projectSelectorBtn = document.getElementById('projectSelectorBtn');
 const projectsLayer = document.getElementById('projectsLayer');
 const projectsList = document.getElementById('projectsList');
 const projectSearchField = document.getElementById('projectSearchField');
-const currentProjectName = document.getElementById('currentProjectName');
 const currentProjectStatus = document.getElementById('currentProjectStatus');
+const historySearchField = document.getElementById('historySearchField');
 
 // --- State ---
 let autoRefreshEnabled = true;
@@ -39,6 +39,8 @@ let idleTimer = null;
 let lastHash = '';
 let currentMode = 'Fast';
 let chatIsOpen = true; // Track if a chat is currently open
+let cachedHistory = []; // Local cache for chat history
+let cachedProjects = []; // Local cache for projects
 
 
 // --- Auth Utilities ---
@@ -941,13 +943,16 @@ async function showChatHistory() {
     const historyLayer = document.getElementById('historyLayer');
     const historyList = document.getElementById('historyList');
 
-    // Show loading state
-    historyList.innerHTML = `
-        <div class="history-state-container">
-            <div class="history-spinner"></div>
-            <div class="history-state-text">Loading History...</div>
-        </div>
-    `;
+    // Show loading state if no cache
+    if (cachedHistory.length === 0) {
+        historyList.innerHTML = `
+            <div class="history-state-container">
+                <div class="history-spinner"></div>
+                <div class="history-state-text">Loading History...</div>
+            </div>
+        `;
+    }
+    
     historyLayer.classList.add('show');
     historyBtn.style.opacity = '1';
 
@@ -956,90 +961,107 @@ async function showChatHistory() {
         const data = await res.json();
 
         if (data.error) {
-            historyList.innerHTML = `
-                <div class="history-state-container">
-                    <div class="history-state-icon">⚠️</div>
-                    <div class="history-state-title">Error loading history</div>
-                    <div class="history-state-desc">${data.error}</div>
-                    <button class="history-new-btn mt-4" onclick="hideChatHistory(); startNewChat();">
-                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                        Start New Conversation
-                    </button>
-                </div>
-            `;
+            if (cachedHistory.length === 0) {
+                historyList.innerHTML = `
+                    <div class="history-state-container">
+                        <div class="history-state-icon">⚠️</div>
+                        <div class="history-state-title">Error loading history</div>
+                        <div class="history-state-desc">${data.error}</div>
+                    </div>
+                `;
+            }
             return;
         }
 
-        const chats = data.chats || [];
-        if (chats.length === 0) {
+        cachedHistory = data.chats || [];
+        renderHistory();
+
+    } catch (e) {
+        if (cachedHistory.length === 0) {
             historyList.innerHTML = `
                 <div class="history-state-container">
-                    <div class="history-state-icon">📝</div>
-                    <div class="history-state-title">No recent chats found</div>
-                    <div class="history-state-desc">Start a new conversation to see them here.</div>
-                    <button class="history-new-btn mt-4" onclick="hideChatHistory(); startNewChat();">
-                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                        Start New Conversation
-                    </button>
+                    <div class="history-state-icon">🔌</div>
+                    <div class="history-state-title">Connection Error</div>
+                    <div class="history-state-desc">Failed to reach the server.</div>
                 </div>
             `;
-            return;
         }
+    }
+}
 
-        // Render chats
-        let html = `
-            <div class="history-action-container">
-                <button class="history-new-btn" onclick="hideChatHistory(); startNewChat();">
-                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                    </svg>
-                    New Conversation
-                </button>
+function renderHistory(filterText = '') {
+    const historyList = document.getElementById('historyList');
+    const query = filterText.toLowerCase().trim();
+    
+    const filtered = cachedHistory.filter(chat => 
+        chat.title.toLowerCase().includes(query) || 
+        chat.workspace.toLowerCase().includes(query)
+    );
+
+    if (filtered.length === 0) {
+        historyList.innerHTML = `
+            <div class="history-state-container">
+                <div class="history-state-icon">🔍</div>
+                <div class="history-state-title">No conversations found</div>
+                <div class="history-state-desc">Try a different search term.</div>
             </div>
-            <div class="history-list-group">
         `;
+        return;
+    }
 
-        chats.forEach(chat => {
+    // Group by workspace
+    const groups = {};
+    filtered.forEach(chat => {
+        if (!groups[chat.workspace]) groups[chat.workspace] = [];
+        groups[chat.workspace].push(chat);
+    });
+
+    let html = `
+        <div class="history-action-container">
+            <button class="history-new-btn" onclick="hideChatHistory(); startNewChat();">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                New Conversation
+            </button>
+        </div>
+    `;
+
+    Object.keys(groups).sort().forEach(workspace => {
+        html += `<div class="history-workspace-header">${escapeHtml(workspace)}</div>`;
+        html += `<div class="history-list-group">`;
+        
+        groups[workspace].forEach(chat => {
             const safeTitle = chat.title.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            const activeClass = chat.isActive ? 'active' : '';
+            
             html += `
-                <div class="history-card" onclick="hideChatHistory(); selectChat('${safeTitle}');">
+                <div class="history-card ${activeClass}" onclick="hideChatHistory(); selectChat('${safeTitle}');">
                     <div class="history-card-icon">
                         <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                         </svg>
+                        ${chat.isActive ? '<div class="history-card-active-dot"></div>' : ''}
                     </div>
                     <div class="history-card-content">
                         <span class="history-card-title">${escapeHtml(chat.title)}</span>
                     </div>
-                    <div class="history-card-arrow">
-                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="9 18 15 12 9 6"></polyline>
-                        </svg>
-                    </div>
+                    <div class="history-card-time">${escapeHtml(chat.time)}</div>
                 </div>
             `;
         });
-
+        
         html += `</div>`;
+    });
 
-        historyList.innerHTML = html;
+    historyList.innerHTML = html;
+}
 
-    } catch (e) {
-        historyList.innerHTML = `
-            <div class="history-state-container">
-                <div class="history-state-icon">🔌</div>
-                <div class="history-state-title">Connection Error</div>
-                <div class="history-state-desc">Failed to reach the server.</div>
-            </div>
-        `;
-    }
+if (historySearchField) {
+    historySearchField.addEventListener('input', (e) => {
+        renderHistory(e.target.value);
+    });
 }
 
 

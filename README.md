@@ -24,9 +24,9 @@ Les variables d'environnement sont gérées dans le fichier `.env` :
 
 ## 4. # Description détaillée
 L'application agit comme un proxy intelligent :
-- **Backend (Node.js)** : Se connecte aux instances CDP (Workbench & Agent Manager), capture l'état des conversations et injecte les commandes utilisateur.
+- **Backend (Node.js)** : Architecture modulaire. Utilise des scripts CDP extraits (`src/cdp/`) pour piloter le Workbench et l'Agent Manager (renommé "Manager" dans le code).
 - **Tunneling (Cloudflare)** : Expose l'interface mobile via un tunnel sécurisé avec mot de passe.
-- **Frontend (Vanilla JS)** : Interface mobile réactive optimisée pour l'interaction tactile.
+- **Frontend (ES Modules)** : Interface découpée en modules indépendants (`public/js/`) pour une meilleure maintenance.
 
 ## 5. # Principaux résultats
 | Feature | État | Source de vérité |
@@ -45,10 +45,12 @@ L'application agit comme un proxy intelligent :
 ## 7. # Plan du repo
 ```text
 .
-├── docs/               # Documentation détaillée et spécifications
-├── public/             # Frontend (HTML, CSS, JS)
+├── src/
+│   └── cdp/            # Scripts d'injection CDP modularisés
+├── public/
+│   └── js/             # Frontend modulaire (ESM)
 ├── certs/              # Certificats SSL auto-signés
-├── server.js           # Serveur Express & Logique CDP
+├── server.js           # Serveur de bridge (EntryPoint)
 └── startup_scripts/    # Utilitaires de lancement
 ```
 
@@ -74,8 +76,8 @@ L'application agit comme un proxy intelligent :
 | 5 | **Chat History enrichi** | ✅ Fait | [chat-history-ui.md](docs/tasks/chat-history-ui.md) |
 | 6 | Cleanup UI Mobile | ✅ Fait | [cleanup-ui-mobile.md](docs/tasks/cleanup-ui-mobile.md) |
 | 7 | Interface Projets Mobile | ✅ Fait | [project-selector-ui.md](docs/tasks/project-selector-ui.md) |
-| 8 | **Refactoring Structurel** | 🟡 À faire | [structural-refactoring.md](docs/tasks/structural-refactoring.md) |
-| 9 | **Refactoring complet** | 🟡 À faire | [agent-manager-refactoring.md](docs/tasks/agent-manager-refactoring.md) |
+| 8 | **Refactoring Structurel** | ✅ Fait | [structural-refactoring.md](docs/tasks/structural-refactoring.md) |
+| 9 | **Refactoring complet** | ✅ Fait | [agent-manager-refactoring.md](docs/tasks/agent-manager-refactoring.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

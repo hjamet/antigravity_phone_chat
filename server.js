@@ -14,6 +14,10 @@ import { dirname, join } from 'path';
 import { inspectUI } from './ui_inspector.js';
 import { execSync } from 'child_process';
 
+// Modular CDP Scripts
+import * as workbenchCdp from './src/cdp/workbench.js';
+import * as managerCdp from './src/cdp/manager.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -29,7 +33,7 @@ let AUTH_TOKEN = 'ag_default_token';
 // Shared CDP connections
 const cdpConnections = {
     workbench: null,
-    launchpad: null
+    manager: null
 };
 let lastSnapshot = null;
 let lastSnapshotHash = null;
@@ -115,7 +119,7 @@ function getJson(url) {
 // Find Antigravity CDP endpoints
 async function discoverCDP() {
     const errors = [];
-    const targets = { workbench: null, launchpad: null };
+    const targets = { workbench: null, manager: null };
     
     for (const port of PORTS) {
         try {
@@ -128,25 +132,25 @@ async function discoverCDP() {
                 targets.workbench = { port, url: workbench.webSocketDebuggerUrl };
             }
 
-            // Find Jetski/Launchpad (Agent Manager)
+            // Find Agent Manager
             // Prioritize target titled "Manager" as it contains the full history and workspaces
             const manager = list.find(t => t.title === 'Manager');
             const jetski = list.find(t => t.url?.includes('jetski') || t.title === 'Launchpad' || t.title?.includes('Agent Manager'));
             const target = manager || jetski;
 
-            if (target && target.webSocketDebuggerUrl && !targets.launchpad) {
+            if (target && target.webSocketDebuggerUrl && !targets.manager) {
                 console.log('Found Agent Manager target:', target.title, `on port ${port}`);
-                targets.launchpad = { port, url: target.webSocketDebuggerUrl };
+                targets.manager = { port, url: target.webSocketDebuggerUrl };
             }
             
-            if (targets.workbench && targets.launchpad) break; // Found both
+            if (targets.workbench && targets.manager) break; // Found both
             
         } catch (e) {
             errors.push(`${port}: ${e.message}`);
         }
     }
     
-    if (!targets.workbench && !targets.launchpad) {
+    if (!targets.workbench && !targets.manager) {
         const errorSummary = errors.length ? `Errors: ${errors.join(', ')}` : 'No ports responding';
         throw new Error(`CDP not found. ${errorSummary}`);
     }
@@ -216,1157 +220,63 @@ async function connectCDP(url) {
     return { ws, call, contexts };
 }
 
-// Capture chat snapshot
+// --- CDP Functions (Delegated to src/cdp/ modules) ---
+
 async function captureSnapshot(cdp) {
-    const CAPTURE_SCRIPT = `(async () => {
-        const cascade = document.getElementById('conversation') || document.getElementById('chat') || document.getElementById('cascade');
-        if (!cascade) {
-            // Debug info
-            const body = document.body;
-            const childIds = Array.from(body.children).map(c => c.id).filter(id => id).join(', ');
-            return { error: 'chat container not found', debug: { hasBody: !!body, availableIds: childIds } };
-        }
-        
-        const cascadeStyles = window.getComputedStyle(cascade);
-        
-        // Find the main scrollable container
-        const scrollContainer = cascade.querySelector('.overflow-y-auto, [data-scroll-area]') || cascade;
-        const scrollInfo = {
-            scrollTop: scrollContainer.scrollTop,
-            scrollHeight: scrollContainer.scrollHeight,
-            clientHeight: scrollContainer.clientHeight,
-            scrollPercent: scrollContainer.scrollTop / (scrollContainer.scrollHeight - scrollContainer.clientHeight) || 0
-        };
-        
-        // Clone cascade to modify it without affecting the original
-        const clone = cascade.cloneNode(true);
-        
-        // Aggressively remove the entire interaction/input/review area
-        try {
-            // 1. Identify common interaction wrappers by class combinations
-            const interactionSelectors = [
-                '.relative.flex.flex-col.gap-8',
-                '.flex.grow.flex-col.justify-start.gap-8',
-                'div[class*="interaction-area"]',
-                '.p-1.bg-gray-500\\/10',
-                '.outline-solid.justify-between',
-                '[contenteditable="true"]'
-            ];
-
-            interactionSelectors.forEach(selector => {
-                clone.querySelectorAll(selector).forEach(el => {
-                    try {
-                        // For the editor, we want to remove its interaction container
-                        if (selector === '[contenteditable="true"]') {
-                            const area = el.closest('.relative.flex.flex-col.gap-8') || 
-                                         el.closest('.flex.grow.flex-col.justify-start.gap-8') ||
-                                         el.closest('div[id^="interaction"]') ||
-                                         el.parentElement?.parentElement;
-                            if (area && area !== clone) area.remove();
-                            else el.remove();
-                        } else {
-                            el.remove();
-                        }
-                    } catch(e) {}
-                });
-            });
-
-            // 2. Text-based cleanup for stray status bars
-            const allElements = clone.querySelectorAll('*');
-            allElements.forEach(el => {
-                try {
-                    const text = (el.innerText || '').toLowerCase();
-                    if (text.includes('review changes') || text.includes('files with changes') || text.includes('context found')) {
-                        // If it's a small structural element or has buttons, it's likely a bar
-                        if (el.children.length < 10 || el.querySelector('button') || el.classList?.contains('justify-between')) {
-                            el.style.display = 'none'; // Use both hide and remove
-                            el.remove();
-                        }
-                    }
-                } catch (e) {}
-            });
-        } catch (globalErr) { }
-
-        // Convert local images to base64
-        const images = clone.querySelectorAll('img');
-        const promises = Array.from(images).map(async (img) => {
-            const rawSrc = img.getAttribute('src');
-            if (rawSrc && (rawSrc.startsWith('/') || rawSrc.startsWith('vscode-file:')) && !rawSrc.startsWith('data:')) {
-                try {
-                    const res = await fetch(rawSrc);
-                    const blob = await res.blob();
-                    await new Promise(r => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => { img.src = reader.result; r(); };
-                        reader.onerror = () => r();
-                        reader.readAsDataURL(blob);
-                    });
-                } catch(e) {}
-            }
-        });
-        await Promise.all(promises);
-
-        // Fix inline file references: Antigravity nests <div> elements inside
-        // <span> and <p> tags (e.g. file-type icons). Browsers auto-close <p> and
-        // <span> when they encounter a <div>, causing unwanted line breaks.
-        // Solution: Convert any <div> inside an inline parent to a <span>.
-        try {
-            const inlineTags = new Set(['SPAN', 'P', 'A', 'LABEL', 'EM', 'STRONG', 'CODE']);
-            const allDivs = Array.from(clone.querySelectorAll('div'));
-            for (const div of allDivs) {
-                try {
-                    if (!div.parentNode) continue;
-                    const parent = div.parentElement;
-                    if (!parent) continue;
-                    
-                    const parentIsInline = inlineTags.has(parent.tagName) || 
-                        (parent.className && (parent.className.includes('inline-flex') || parent.className.includes('inline-block')));
-                        
-                    if (parentIsInline) {
-                        const span = document.createElement('span');
-                        // MOVE children instead of copying (prevents orphaning nested divs)
-                        while (div.firstChild) {
-                            span.appendChild(div.firstChild);
-                        }
-                        if (div.className) span.className = div.className;
-                        if (div.getAttribute('style')) span.setAttribute('style', div.getAttribute('style'));
-                        span.style.display = 'inline-flex';
-                        span.style.alignItems = 'center';
-                        span.style.verticalAlign = 'middle';
-                        div.replaceWith(span);
-                    }
-                } catch(e) {}
-            }
-        } catch(e) {}
-        
-        const html = clone.outerHTML;
-        
-        const rules = [];
-        for (const sheet of document.styleSheets) {
-            try {
-                for (const rule of sheet.cssRules) {
-                    rules.push(rule.cssText);
-                }
-            } catch (e) { }
-        }
-        const allCSS = rules.join('\\n');
-        
-        return {
-            html: html,
-            css: allCSS,
-            backgroundColor: cascadeStyles.backgroundColor,
-            color: cascadeStyles.color,
-            fontFamily: cascadeStyles.fontFamily,
-            scrollInfo: scrollInfo,
-            stats: {
-                nodes: clone.getElementsByTagName('*').length,
-                htmlSize: html.length,
-                cssSize: allCSS.length
-            }
-        };
-    })()`;
-
-    for (const ctx of cdp.contexts) {
-        try {
-            // console.log(`Trying context ${ctx.id} (${ctx.name || ctx.origin})...`);
-            const result = await cdp.call("Runtime.evaluate", {
-                expression: CAPTURE_SCRIPT,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-
-            if (result.exceptionDetails) {
-                // console.log(`Context ${ctx.id} exception:`, result.exceptionDetails);
-                continue;
-            }
-
-            if (result.result && result.result.value) {
-                const val = result.result.value;
-                if (val.error) {
-                    // console.log(`Context ${ctx.id} script error:`, val.error);
-                    // if (val.debug) console.log(`   Debug info:`, JSON.stringify(val.debug));
-                } else {
-                    return val;
-                }
-            }
-        } catch (e) {
-            console.log(`Context ${ctx.id} connection error:`, e.message);
-        }
-    }
-
-    return null;
+    return await workbenchCdp.captureSnapshot(cdp);
 }
 
-// Inject message into Antigravity
 async function injectMessage(text) {
-    if (!cdpConnections.workbench) throw new Error("Not connected to CDP");
-
-    // Use JSON.stringify for robust escaping (handles ", \, newlines, backticks, unicode, etc.)
-    const safeText = JSON.stringify(text);
-
-    const EXPRESSION = `(async () => {
-        const cancel = document.querySelector('[data-tooltip-id="input-send-button-cancel-tooltip"]');
-        if (cancel && cancel.offsetParent !== null) return { ok:false, reason:"busy" };
-
-        const editors = [...document.querySelectorAll('#conversation [contenteditable="true"], #chat [contenteditable="true"], #cascade [contenteditable="true"]')]
-            .filter(el => el.offsetParent !== null);
-        const editor = editors.at(-1);
-        if (!editor) return { ok:false, error:"editor_not_found" };
-
-        const textToInsert = ${safeText};
-
-        editor.focus();
-        document.execCommand?.("selectAll", false, null);
-        document.execCommand?.("delete", false, null);
-
-        let inserted = false;
-        try { inserted = !!document.execCommand?.("insertText", false, textToInsert); } catch {}
-        if (!inserted) {
-            editor.textContent = textToInsert;
-            editor.dispatchEvent(new InputEvent("beforeinput", { bubbles:true, inputType:"insertText", data: textToInsert }));
-            editor.dispatchEvent(new InputEvent("input", { bubbles:true, inputType:"insertText", data: textToInsert }));
-        }
-
-        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-        const submit = document.querySelector("svg.lucide-arrow-right")?.closest("button");
-        if (submit && !submit.disabled) {
-            submit.click();
-            return { ok:true, method:"click_submit" };
-        }
-
-        // Submit button not found, but text is inserted - trigger Enter key
-        editor.dispatchEvent(new KeyboardEvent("keydown", { bubbles:true, key:"Enter", code:"Enter" }));
-        editor.dispatchEvent(new KeyboardEvent("keyup", { bubbles:true, key:"Enter", code:"Enter" }));
-        
-        return { ok:true, method:"enter_keypress" };
-    })()`;
-
-    for (const ctx of cdpConnections.workbench.contexts) {
-        try {
-            const result = await cdpConnections.workbench.call("Runtime.evaluate", {
-                expression: EXPRESSION,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-
-            if (result.result && result.result.value) {
-                return result.result.value;
-            }
-        } catch (e) { }
-    }
-
-    return { ok: false, reason: "no_context" };
+    return await workbenchCdp.injectMessage(cdpConnections.workbench, text);
 }
 
-// Set functionality mode (Fast vs Planning)
-async function setMode(modeText) {
-    if (!cdpConnections.workbench) throw new Error("Not connected to CDP");
-    if (!['Fast', 'Planning'].includes(modeText)) return { error: 'Invalid mode' };
-
-    const EXP = `(async () => {
-        const mode = ${JSON.stringify(modeText)};
-        // STRATEGY: Find the element that IS the current mode indicator.
-        // It will have text 'Fast' or 'Planning'.
-        // It might not be a <button>, could be a <div> with cursor-pointer.
-        
-        // 1. Get all elements with text 'Fast' or 'Planning'
-        const allEls = Array.from(document.querySelectorAll('*'));
-        const candidates = allEls.filter(el => {
-            // Must have single text node child to avoid parents
-            if (el.children.length > 0) return false;
-            const txt = el.textContent.trim();
-            return txt === 'Fast' || txt === 'Planning';
-        });
-
-        // 2. Find the one that looks interactive (cursor-pointer)
-        // Traverse up from text node to find clickable container
-        let modeBtn = null;
-        
-        for (const el of candidates) {
-            let current = el;
-            // Go up max 4 levels
-            for (let i = 0; i < 4; i++) {
-                if (!current) break;
-                const style = window.getComputedStyle(current);
-                if (style.cursor === 'pointer' || current.tagName === 'BUTTON') {
-                    modeBtn = current;
-                    break;
-                }
-                current = current.parentElement;
-            }
-            if (modeBtn) break;
-        }
-
-        if (!modeBtn) return { error: 'Mode indicator/button not found' };
-
-        // Check if already set
-        if (modeBtn.innerText.includes(mode)) return { success: true, alreadySet: true };
-
-        // 3. Click to open menu
-        modeBtn.click();
-        await new Promise(r => setTimeout(r, 600));
-
-        // 4. Find the dialog
-        let visibleDialog = Array.from(document.querySelectorAll('[role="dialog"]'))
-                                .find(d => d.offsetHeight > 0 && d.innerText.includes(mode));
-        
-        // Fallback: Just look for any new visible container if role=dialog is missing
-        if (!visibleDialog) {
-            // Maybe it's not role=dialog? Look for a popover-like div
-             visibleDialog = Array.from(document.querySelectorAll('div'))
-                .find(d => {
-                    const style = window.getComputedStyle(d);
-                    return d.offsetHeight > 0 && 
-                           (style.position === 'absolute' || style.position === 'fixed') && 
-                           d.innerText.includes(mode) &&
-                           !d.innerText.includes('Files With Changes'); // Anti-context menu
-                });
-        }
-
-        if (!visibleDialog) return { error: 'Dropdown not opened or options not visible' };
-
-        // 5. Click the option
-        const allDialogEls = Array.from(visibleDialog.querySelectorAll('*'));
-        const target = allDialogEls.find(el => 
-            el.children.length === 0 && el.textContent.trim() === mode
-        );
-
-        if (target) {
-            target.click();
-            await new Promise(r => setTimeout(r, 200));
-            return { success: true };
-        }
-        
-        return { error: 'Mode option text not found in dialog. Dialog text: ' + visibleDialog.innerText.substring(0, 50) };
-
-    } catch(err) {
-        return { error: 'JS Error: ' + err.toString() };
-    }
-})()`;
-
-    for (const ctx of cdpConnections.workbench.contexts) {
-        try {
-            const res = await cdpConnections.workbench.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) { }
-    }
-    return { error: 'Context failed' };
-}
-
-// Stop Generation
 async function stopGeneration() {
-    if (!cdpConnections.workbench) throw new Error("Not connected to CDP");
-
-    const EXP = `(async () => {
-        // Look for the cancel button
-        const cancel = document.querySelector('[data-tooltip-id="input-send-button-cancel-tooltip"]');
-        if (cancel && cancel.offsetParent !== null) {
-            cancel.click();
-            return { success: true };
-        }
-        
-        // Fallback: Look for a square icon in the send button area
-        const stopBtn = document.querySelector('button svg.lucide-square')?.closest('button');
-        if (stopBtn && stopBtn.offsetParent !== null) {
-            stopBtn.click();
-            return { success: true, method: 'fallback_square' };
-        }
-
-        return { error: 'No active generation found to stop' };
-    })()`;
-
-    for (const ctx of cdpConnections.workbench.contexts) {
-        try {
-            const res = await cdpConnections.workbench.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) { }
-    }
-    return { error: 'Context failed' };
+    return await workbenchCdp.stopGeneration(cdpConnections.workbench);
 }
 
-// Click Element (Remote)
-async function clickElement({ selector, index, textContent }) {
-    if (!cdpConnections.workbench) throw new Error("Not connected to CDP");
-
-    const safeText = JSON.stringify(textContent || '');
-
-    const EXP = `(async () => {
-        try {
-            // Priority: Search inside the chat container first for better accuracy
-            const root = document.getElementById('conversation') || document.getElementById('chat') || document.getElementById('cascade') || document;
-            
-            // Strategy: Find all elements matching the selector
-            let elements = Array.from(root.querySelectorAll('${selector}'));
-            
-            const filterText = ${safeText};
-            if (filterText) {
-                elements = elements.filter(el => {
-                    const txt = (el.innerText || el.textContent || '').trim();
-                    const firstLine = txt.split('\\n')[0].trim();
-                    // Match if first line matches (thought blocks) or if it contains the label (buttons)
-                    return firstLine === filterText || txt.includes(filterText);
-                });
-                
-                // CRITICAL: If elements are nested (e.g. <div><span>Text</span></div>), 
-                // both will match. We only want the most specific (inner-most) one.
-                elements = elements.filter(el => {
-                    return !elements.some(other => other !== el && el.contains(other));
-                });
-            }
-
-            const target = elements[${index}];
-
-            if (target) {
-                // Focus and Click
-                if (target.focus) target.focus();
-                target.click();
-                return { success: true, found: elements.length, indexUsed: ${index} };
-            }
-            
-            return { error: 'Element not found at index ' + ${index} + ' among ' + elements.length + ' matches' };
-        } catch(e) {
-            return { error: e.toString() };
-        }
-    })()`;
-
-    for (const ctx of cdpConnections.workbench.contexts) {
-        try {
-            const res = await cdpConnections.workbench.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value?.success) return res.result.value;
-            // If we found it but click didn't return success (unlikely with this script), continue to next context
-        } catch (e) { }
-    }
-    return { error: 'Click failed in all contexts or element not found at index' };
+async function clickElement(params) {
+    return await workbenchCdp.clickElement(cdpConnections.workbench, params);
 }
 
-// Remote scroll - sync phone scroll to desktop
 async function remoteScroll(scrollTop, scrollPercent) {
-    if (!cdpConnections.workbench) throw new Error("Not connected to CDP");
-
-    // Try to scroll the chat container in Antigravity
-    const EXPRESSION = `(async () => {
-        try {
-            // Find the main scrollable chat container
-            const scrollables = [...document.querySelectorAll('#conversation [class*="scroll"], #chat [class*="scroll"], #cascade [class*="scroll"], #conversation [style*="overflow"], #chat [style*="overflow"], #cascade [style*="overflow"]')]
-                .filter(el => el.scrollHeight > el.clientHeight);
-            
-            // Also check for the main chat area
-            const chatArea = document.querySelector('#conversation .overflow-y-auto, #chat .overflow-y-auto, #cascade .overflow-y-auto, #conversation [data-scroll-area], #chat [data-scroll-area], #cascade [data-scroll-area]');
-            if (chatArea) scrollables.unshift(chatArea);
-            
-            if (scrollables.length === 0) {
-                // Fallback: scroll the main container element
-                const cascade = document.getElementById('conversation') || document.getElementById('chat') || document.getElementById('cascade');
-                if (cascade && cascade.scrollHeight > cascade.clientHeight) {
-                    scrollables.push(cascade);
-                }
-            }
-            
-            if (scrollables.length === 0) return { error: 'No scrollable element found' };
-            
-            const target = scrollables[0];
-            
-            // Use percentage-based scrolling for better sync
-            if (${scrollPercent} !== undefined) {
-                const maxScroll = target.scrollHeight - target.clientHeight;
-                target.scrollTop = maxScroll * ${scrollPercent};
-            } else {
-                target.scrollTop = ${scrollTop || 0};
-            }
-            
-            return { success: true, scrolled: target.scrollTop };
-        } catch(e) {
-            return { error: e.toString() };
-        }
-    })()`;
-
-    for (const ctx of cdpConnections.workbench.contexts) {
-        try {
-            const res = await cdpConnections.workbench.call("Runtime.evaluate", {
-                expression: EXPRESSION,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value?.success) return res.result.value;
-        } catch (e) { }
-    }
-    return { error: 'Scroll failed in all contexts' };
+    return await workbenchCdp.remoteScroll(cdpConnections.workbench, scrollTop, scrollPercent);
 }
 
-// Set AI Model
+async function setMode(modeText) {
+    return await workbenchCdp.setMode(cdpConnections.workbench, modeText);
+}
+
 async function setModel(modelText) {
-    if (!cdpConnections.workbench) throw new Error("Not connected to CDP");
-
-    const EXP = `(async () => {
-        const model = ${JSON.stringify(modelText)};
-        // STRATEGY: Multi-layered approach to find and click the model selector
-        const KNOWN_KEYWORDS = ["Gemini", "Claude", "GPT", "Model"];
-        
-        let modelBtn = null;
-        
-        // Strategy 1: Look for data-tooltip-id patterns (most reliable)
-        modelBtn = document.querySelector('[data-tooltip-id*="model"], [data-tooltip-id*="provider"]');
-        
-        // Strategy 2: Look for buttons/elements containing model keywords with SVG icons
-        if (!modelBtn) {
-            const candidates = Array.from(document.querySelectorAll('button, [role="button"], div, span'))
-                .filter(el => {
-                    const txt = el.innerText?.trim() || '';
-                    return KNOWN_KEYWORDS.some(k => txt.includes(k)) && el.offsetParent !== null;
-                });
-
-            // Find the best one (has chevron icon or cursor pointer)
-            modelBtn = candidates.find(el => {
-                const style = window.getComputedStyle(el);
-                const hasSvg = el.querySelector('svg.lucide-chevron-up') || 
-                               el.querySelector('svg.lucide-chevron-down') || 
-                               el.querySelector('svg[class*="chevron"]') ||
-                               el.querySelector('svg');
-                return (style.cursor === 'pointer' || el.tagName === 'BUTTON') && hasSvg;
-            }) || candidates[0];
-        }
-        
-        // Strategy 3: Traverse from text nodes up to clickable parents
-        if (!modelBtn) {
-            const allEls = Array.from(document.querySelectorAll('*'));
-            const textNodes = allEls.filter(el => {
-                if (el.children.length > 0) return false;
-                const txt = el.textContent;
-                return KNOWN_KEYWORDS.some(k => txt.includes(k));
-            });
-
-            for (const el of textNodes) {
-                let current = el;
-                for (let i = 0; i < 5; i++) {
-                    if (!current) break;
-                    if (current.tagName === 'BUTTON' || window.getComputedStyle(current).cursor === 'pointer') {
-                        modelBtn = current;
-                        break;
-                    }
-                    current = current.parentElement;
-                }
-                if (modelBtn) break;
-            }
-        }
-
-        if (!modelBtn) return { error: 'Model selector button not found' };
-
-        // Click to open menu
-        modelBtn.click();
-        await new Promise(r => setTimeout(r, 600));
-
-        // Find the dialog/dropdown - search globally (React portals render at body level)
-        let visibleDialog = null;
-        
-        // Try specific dialog patterns first
-        const dialogs = Array.from(document.querySelectorAll('[role="dialog"], [role="listbox"], [role="menu"], [data-radix-popper-content-wrapper]'));
-        visibleDialog = dialogs.find(d => d.offsetHeight > 0 && d.innerText?.includes(model));
-        
-        // Fallback: look for positioned divs
-        if (!visibleDialog) {
-            visibleDialog = Array.from(document.querySelectorAll('div'))
-                .find(d => {
-                    const style = window.getComputedStyle(d);
-                    return d.offsetHeight > 0 && 
-                           (style.position === 'absolute' || style.position === 'fixed') && 
-                           d.innerText?.includes(model) && 
-                           !d.innerText?.includes('Files With Changes');
-                });
-        }
-
-        if (!visibleDialog) {
-            // Blind search across entire document as last resort
-            const allElements = Array.from(document.querySelectorAll('[role="menuitem"], [role="option"]'));
-            const target = allElements.find(el => 
-                el.offsetParent !== null && 
-                (el.innerText?.trim() === model || el.innerText?.includes(model))
-            );
-            if (target) {
-                target.click();
-                return { success: true, method: 'blind_search' };
-            }
-            return { error: 'Model list not opened' };
-        }
-
-        // Select specific model inside the dialog
-        const allDialogEls = Array.from(visibleDialog.querySelectorAll('*'));
-        const validEls = allDialogEls.filter(el => el.children.length === 0 && el.textContent?.trim().length > 0);
-        
-        // A. Exact Match (Best)
-        let target = validEls.find(el => el.textContent.trim() === model);
-        
-        // B. Page contains Model
-        if (!target) {
-            target = validEls.find(el => el.textContent.includes(model));
-        }
-
-        // C. Closest partial match
-        if (!target) {
-            const partialMatches = validEls.filter(el => model.includes(el.textContent.trim()));
-            if (partialMatches.length > 0) {
-                partialMatches.sort((a, b) => b.textContent.trim().length - a.textContent.trim().length);
-                target = partialMatches[0];
-            }
-        }
-
-        if (target) {
-            target.scrollIntoView({block: 'center'});
-            target.click();
-            await new Promise(r => setTimeout(r, 200));
-            return { success: true };
-        }
-
-        return { error: 'Model "' + model + '" not found in list. Visible: ' + visibleDialog.innerText.substring(0, 100) };
-    } catch(err) {
-        return { error: 'JS Error: ' + err.toString() };
-    }
-})()`;
-
-    for (const ctx of cdpConnections.workbench.contexts) {
-        try {
-            const res = await cdpConnections.workbench.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) { }
-    }
-    return { error: 'Context failed' };
+    return await workbenchCdp.setModel(cdpConnections.workbench, modelText);
 }
 
-// Start New Chat - Click the + button at the TOP of the chat window (NOT the context/media + button)
 async function startNewChat() {
-    if (!cdpConnections.workbench) throw new Error("Not connected to CDP");
-
-    const EXP = `(async () => {
-        try {
-            // Priority 1: Exact selector from user (data-tooltip-id="new-conversation-tooltip")
-            const exactBtn = document.querySelector('[data-tooltip-id="new-conversation-tooltip"]');
-            if (exactBtn) {
-                exactBtn.click();
-                return { success: true, method: 'data-tooltip-id' };
-            }
-
-            // Fallback: Use previous heuristics
-            const allButtons = Array.from(document.querySelectorAll('button, [role="button"], a'));
-            
-            // Find all buttons with plus icons
-            const plusButtons = allButtons.filter(btn => {
-                if (btn.offsetParent === null) return false; // Skip hidden
-                const hasPlusIcon = btn.querySelector('svg.lucide-plus') || 
-                                   btn.querySelector('svg.lucide-square-plus') ||
-                                   btn.querySelector('svg[class*="plus"]');
-                return hasPlusIcon;
-            });
-            
-            // Filter only top buttons (toolbar area)
-            const topPlusButtons = plusButtons.filter(btn => {
-                const rect = btn.getBoundingClientRect();
-                return rect.top < 200;
-            });
-
-            if (topPlusButtons.length > 0) {
-                 topPlusButtons.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
-                 topPlusButtons[0].click();
-                 return { success: true, method: 'filtered_top_plus', count: topPlusButtons.length };
-            }
-            
-            // Fallback: aria-label
-             const newChatBtn = allButtons.find(btn => {
-                const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
-                const title = btn.getAttribute('title')?.toLowerCase() || '';
-                return (ariaLabel.includes('new') || title.includes('new')) && btn.offsetParent !== null;
-            });
-            
-            if (newChatBtn) {
-                newChatBtn.click();
-                return { success: true, method: 'aria_label_new' };
-            }
-            
-            return { error: 'New chat button not found' };
-        } catch(e) {
-            return { error: e.toString() };
-        }
-    })()`;
-
-    for (const ctx of cdpConnections.workbench.contexts) {
-        try {
-            const res = await cdpConnections.workbench.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value?.success) return res.result.value;
-        } catch (e) { }
-    }
-    return { error: 'Context failed' };
+    return await workbenchCdp.startNewChat(cdpConnections.workbench);
 }
-// Get Chat History from Agent Manager (Manager target)
+
 async function getChatHistoryFromManager() {
-    if (!cdpConnections.launchpad) throw new Error("Agent Manager not connected");
-
-    console.log('📜 Requesting chat history from Agent Manager...');
-
-    const EXP = `(async () => {
-        try {
-            // 1. Open the history panel by clicking the history icon if needed
-            const buttons = Array.from(document.querySelectorAll('[role="button"], button'));
-            const historyBtn = buttons.find(btn => {
-                const icon = btn.querySelector('.google-symbols');
-                return icon && icon.textContent.trim() === 'history';
-            });
-
-            if (historyBtn) {
-                historyBtn.click();
-                await new Promise(r => setTimeout(r, 1500));
-            }
-
-            // 2. Scrape conversations from the sidebar and search results
-            // We use the data-testid pattern found in exploration
-            const pills = document.querySelectorAll('[data-testid^="convo-pill-"]');
-            const chats = [];
-            
-            pills.forEach(pill => {
-                const title = pill.textContent?.trim() || '';
-                const id = pill.getAttribute('data-testid')?.replace('convo-pill-', '') || '';
-                
-                // Find containing button to get relative elements
-                const container = pill.closest('button');
-                let time = '';
-                let isActive = false;
-                
-                if (container) {
-                    // Find timestamp (text-xs opacity-50)
-                    const timeSpans = Array.from(container.querySelectorAll('span.text-xs'));
-                    const timeSpan = timeSpans.find(s => {
-                        const t = s.textContent?.trim();
-                        // Format is usually "now", "2m", "1h", "1d"
-                        return t && (t === 'now' || /\\d+[mhdw]/.test(t));
-                    });
-                    if (timeSpan) time = timeSpan.textContent.trim();
-                    
-                    // Check for active state (progress_activity icon)
-                    container.querySelectorAll('.google-symbols').forEach(icon => {
-                        if (icon.textContent?.trim() === 'progress_activity') isActive = true;
-                    });
-                }
-                
-                // Find Workspace (header in the sidebar section)
-                let workspace = 'Other';
-                const section = pill.closest('.flex.flex-col.gap-px');
-                if (section) {
-                    const header = section.querySelector('span.text-sm.font-medium');
-                    if (header) workspace = header.textContent.trim();
-                }
-
-                if (title.length > 2) {
-                    chats.push({ 
-                        title, 
-                        id, 
-                        time: time || 'Recent', 
-                        isActive, 
-                        workspace 
-                    });
-                }
-            });
-
-            return { success: true, chats };
-        } catch (e) {
-            return { error: e.toString(), chats: [] };
-        }
-    })()`;
-
-    for (const ctx of cdpConnections.launchpad.contexts) {
-        try {
-            const res = await cdpConnections.launchpad.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) { }
-    }
-    return { error: 'Context failed or target unavailable', chats: [] };
+    return await managerCdp.getChatHistory(cdpConnections.manager);
 }
 
 async function selectChat(chatTitle) {
-    if (!cdpConnections.workbench) throw new Error("Not connected to CDP");
-
-    const safeChatTitle = JSON.stringify(chatTitle);
-
-    const EXP = `(async () => {
-    try {
-        const targetTitle = ${safeChatTitle};
-
-        // First, we need to open the history panel
-        // Find the history button at the top (next to + button)
-        const allButtons = Array.from(document.querySelectorAll('button, [role="button"]'));
-
-        let historyBtn = null;
-
-        // Find by icon type
-        for (const btn of allButtons) {
-            if (btn.offsetParent === null) continue;
-            const hasHistoryIcon = btn.querySelector('svg.lucide-clock') ||
-                btn.querySelector('svg.lucide-history') ||
-                btn.querySelector('svg.lucide-folder') ||
-                btn.querySelector('svg.lucide-clock-rotate-left');
-            if (hasHistoryIcon) {
-                historyBtn = btn;
-                break;
-            }
-        }
-
-        // Fallback: Find by position (second button at top)
-        if (!historyBtn) {
-            const topButtons = allButtons.filter(btn => {
-                if (btn.offsetParent === null) return false;
-                const rect = btn.getBoundingClientRect();
-                return rect.top < 100 && rect.top > 0;
-            }).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-
-            if (topButtons.length >= 2) {
-                historyBtn = topButtons[1];
-            }
-        }
-
-        if (historyBtn) {
-            historyBtn.click();
-            await new Promise(r => setTimeout(r, 600));
-        }
-
-        // Now find the chat by title in the opened panel
-        await new Promise(r => setTimeout(r, 200));
-
-        const allElements = Array.from(document.querySelectorAll('*'));
-
-        // Find elements matching the title
-        const candidates = allElements.filter(el => {
-            if (el.offsetParent === null) return false;
-            const text = el.innerText?.trim();
-            return text && text.startsWith(targetTitle.substring(0, Math.min(30, targetTitle.length)));
-        });
-
-        // Find the most specific (deepest) visible element with the title
-        let target = null;
-        let maxDepth = -1;
-
-        for (const el of candidates) {
-            // Skip if it has too many children (likely a container)
-            if (el.children.length > 5) continue;
-
-            let depth = 0;
-            let parent = el;
-            while (parent) {
-                depth++;
-                parent = parent.parentElement;
-            }
-
-            if (depth > maxDepth) {
-                maxDepth = depth;
-                target = el;
-            }
-        }
-
-        if (target) {
-            // Find clickable parent if needed
-            let clickable = target;
-            for (let i = 0; i < 5; i++) {
-                if (!clickable) break;
-                const style = window.getComputedStyle(clickable);
-                if (style.cursor === 'pointer' || clickable.tagName === 'BUTTON') {
-                    break;
-                }
-                clickable = clickable.parentElement;
-            }
-
-            if (clickable) {
-                clickable.click();
-                return { success: true, method: 'clickable_parent' };
-            }
-
-            target.click();
-            return { success: true, method: 'direct_click' };
-        }
-
-        return { error: 'Chat not found: ' + targetTitle };
-    } catch (e) {
-        return { error: e.toString() };
-    }
-})()`;
-
-    for (const ctx of cdpConnections.workbench.contexts) {
-        try {
-            const res = await cdpConnections.workbench.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) { }
-    }
-    return { error: 'Context failed' };
+    return await managerCdp.selectChat(cdpConnections.workbench, chatTitle);
 }
 
-// Close History Panel (Escape)
 async function closeHistory() {
-    if (!cdpConnections.workbench) throw new Error("Not connected to CDP");
-
-    const EXP = `(async () => {
-        try {
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
-            document.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Escape', code: 'Escape', bubbles: true }));
-            return { success: true };
-        } catch(e) {
-            return { error: e.toString() };
-        }
-    })()`;
-
-    for (const ctx of cdpConnections.workbench.contexts) {
-        try {
-            const res = await cdpConnections.workbench.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value?.success) return res.result.value;
-        } catch (e) { }
-    }
-    return { error: 'Failed to close history panel' };
+    return await workbenchCdp.closeHistory(cdpConnections.workbench);
 }
 
-// Check if a chat is currently open (has cascade element)
 async function hasChatOpen() {
-    if (!cdpConnections.workbench) throw new Error("Not connected to CDP");
-
-    const EXP = `(() => {
-    const chatContainer = document.getElementById('conversation') || document.getElementById('chat') || document.getElementById('cascade');
-    const hasMessages = chatContainer && chatContainer.querySelectorAll('[class*="message"], [data-message]').length > 0;
-    return {
-        hasChat: !!chatContainer,
-        hasMessages: hasMessages,
-        editorFound: !!(chatContainer && chatContainer.querySelector('[data-lexical-editor="true"]'))
-    };
-})()`;
-
-    for (const ctx of cdpConnections.workbench.contexts) {
-        try {
-            const res = await cdpConnections.workbench.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) { }
-    }
-    return { hasChat: false, hasMessages: false, editorFound: false };
+    return await workbenchCdp.hasChatOpen(cdpConnections.workbench);
 }
 
-// Get App State (Mode & Model)
 async function getAppState() {
-    if (!cdpConnections.workbench) return null;
-
-    const EXP = `(async () => {
-    try {
-        const state = { mode: 'Unknown', model: 'Unknown' };
-
-        // 1. Get Mode (Fast/Planning)
-        // Strategy: Find the clickable mode button which contains either "Fast" or "Planning"
-        // It's usually a button or div with cursor:pointer containing the mode text
-        const allEls = Array.from(document.querySelectorAll('*'));
-
-        // Find elements that are likely mode buttons
-        for (const el of allEls) {
-            if (el.children.length > 0) continue;
-            const text = (el.innerText || '').trim();
-            if (text !== 'Fast' && text !== 'Planning') continue;
-
-            // Check if this or a parent is clickable (the actual mode selector)
-            let current = el;
-            for (let i = 0; i < 5; i++) {
-                if (!current) break;
-                const style = window.getComputedStyle(current);
-                if (style.cursor === 'pointer' || current.tagName === 'BUTTON') {
-                    state.mode = text;
-                    break;
-                }
-                current = current.parentElement;
-            }
-            if (state.mode !== 'Unknown') break;
-        }
-
-        // Fallback: Just look for visible text
-        if (state.mode === 'Unknown') {
-            const textNodes = allEls.filter(el => el.children.length === 0 && el.innerText);
-            if (textNodes.some(el => el.innerText.trim() === 'Planning')) state.mode = 'Planning';
-            else if (textNodes.some(el => el.innerText.trim() === 'Fast')) state.mode = 'Fast';
-        }
-
-        // 2. Get Model
-        // Strategy: Look for leaf text nodes containing a known model keyword
-        const KNOWN_MODELS = ["Gemini", "Claude", "GPT"];
-        const textNodes2 = allEls.filter(el => el.children.length === 0 && el.innerText);
-        
-        // First try: find inside a clickable parent (button, cursor:pointer)
-        let modelEl = textNodes2.find(el => {
-            const txt = el.innerText.trim();
-            if (!KNOWN_MODELS.some(k => txt.includes(k))) return false;
-            // Must be in a clickable context (header/toolbar, not chat content)
-            let parent = el;
-            for (let i = 0; i < 8; i++) {
-                if (!parent) break;
-                if (parent.tagName === 'BUTTON' || window.getComputedStyle(parent).cursor === 'pointer') return true;
-                parent = parent.parentElement;
-            }
-            return false;
-        });
-        
-        // Fallback: any leaf node with a known model name
-        if (!modelEl) {
-            modelEl = textNodes2.find(el => {
-                const txt = el.innerText.trim();
-                return KNOWN_MODELS.some(k => txt.includes(k)) && txt.length < 60;
-            });
-        }
-
-        if (modelEl) {
-            state.model = modelEl.innerText.trim();
-        }
-
-        return state;
-    } catch (e) { return { error: e.toString() }; }
-})()`;
-
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) { }
-    }
-    return { error: 'Context failed' };
+    return await workbenchCdp.getAppState(cdpConnections.workbench);
 }
 
-// Simple hash function
-function hashString(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash;
-    }
-    return hash.toString(36);
+async function autoOpenManager(workbenchCdp) {
+    return await workbenchCdp.autoOpenManager(workbenchCdp);
 }
-
-// Check if a request is from the same Wi-Fi (internal network)
-function isLocalRequest(req) {
-    // 1. Check for proxy headers (Cloudflare, ngrok, etc.)
-    // If these exist, the request is coming via an external tunnel/proxy
-    if (req.headers['x-forwarded-for'] || req.headers['x-forwarded-host'] || req.headers['x-real-ip']) {
-        return false;
-    }
-
-    // 2. Check the remote IP address
-    const ip = req.ip || req.socket.remoteAddress || '';
-
-    // Standard local/private IPv4 and IPv6 ranges
-    return ip === '127.0.0.1' ||
-        ip === '::1' ||
-        ip === '::ffff:127.0.0.1' ||
-        ip.startsWith('192.168.') ||
-        ip.startsWith('10.') ||
-        ip.startsWith('172.16.') || ip.startsWith('172.17.') ||
-        ip.startsWith('172.18.') || ip.startsWith('172.19.') ||
-        ip.startsWith('172.2') || ip.startsWith('172.3') ||
-        ip.startsWith('::ffff:192.168.') ||
-        ip.startsWith('::ffff:10.');
-}
-
-// Auto-open Launchpad mechanism
-async function autoOpenLaunchpad(workbenchCdp) {
-    if (!workbenchCdp) return false;
-    
-    console.log('🚀 Attempting to auto-launch Agent Manager (Launchpad)...');
-    
-    // The button is usually in the titlebar area with specific tooltip or aria-label
-    const EXP = `(async () => {
-        try {
-            // Priority 1: Exact matches based on title/aria-label/text
-            const allBtns = Array.from(document.querySelectorAll('a, button, [role="button"]'));
-            
-            const launchpadBtn = allBtns.find(btn => {
-                if (btn.offsetParent === null) return false;
-                const title = (btn.getAttribute('title') || '').toLowerCase();
-                const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
-                const text = (btn.innerText || '').toLowerCase();
-                
-                return title.includes('agent manager') || 
-                       aria.includes('agent manager') || 
-                       title.includes('launchpad') ||
-                       text.includes('agent manager');
-            });
-            
-            if (launchpadBtn) {
-                launchpadBtn.click();
-                return { success: true, method: 'found-by-text' };
-            }
-            
-            // Priority 2: Blind click on specific titlebar selector if nothing else
-            const fallbackBtn = document.querySelector('#workbench\\\\.parts\\\\.titlebar > div > div.titlebar-right > div.action-toolbar-container > a');
-            if (fallbackBtn) {
-                fallbackBtn.click();
-                return { success: true, method: 'found-by-css' };
-            }
-            
-            return { error: 'Agent Manager button not found in Workbench' };
-        } catch(e) {
-            return { error: e.toString() };
-        }
-    })()`;
-
-    for (const ctx of workbenchCdp.contexts) {
-        try {
-            const res = await workbenchCdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value?.success) return true;
-        } catch (e) { }
-    }
-    return false;
-}
-
 // Initialize CDP connections
 async function initCDP() {
     console.log('🔍 Discovering Antigravity CDP endpoints...');
@@ -1380,7 +290,7 @@ async function initCDP() {
     }
 
     // Auto-launch Launchpad if Workbench is connected but Launchpad is not found yet
-    if (cdpConnections.workbench && !targets.launchpad && !cdpConnections.launchpad) {
+    if (cdpConnections.workbench && !targets.manager && !cdpConnections.manager) {
         const launched = await autoOpenLaunchpad(cdpConnections.workbench);
         if (launched) {
             console.log('⏳ Waiting for Launchpad to start...');
@@ -1388,19 +298,19 @@ async function initCDP() {
             
             // Re-discover targets
             const newTargets = await discoverCDP();
-            if (newTargets.launchpad) {
-                targets.launchpad = newTargets.launchpad;
+            if (newTargets.manager) {
+                targets.manager = newTargets.manager;
             }
         } else {
             console.log('⚠️ Could not automatically launch Agent Manager. Please open it manually if you need multi-workspace support.');
         }
     }
     
-    if (targets.launchpad && !cdpConnections.launchpad) {
-        console.log(`✅ Found Launchpad on port ${targets.launchpad.port}`);
+    if (targets.manager && !cdpConnections.manager) {
+        console.log(`✅ Found Launchpad on port ${targets.manager.port}`);
         console.log('🔌 Connecting to Launchpad...');
-        cdpConnections.launchpad = await connectCDP(targets.launchpad.url);
-        console.log(`✅ Connected to Launchpad! (${cdpConnections.launchpad.contexts.length} contexts)`);
+        cdpConnections.manager = await connectCDP(targets.manager.url);
+        console.log(`✅ Connected to Launchpad! (${cdpConnections.manager.contexts.length} contexts)`);
     }
 }
 
@@ -1411,7 +321,7 @@ async function startPolling(wss) {
 
     const poll = async () => {
         const isWorkbenchDead = !cdpConnections.workbench || (cdpConnections.workbench.ws && cdpConnections.workbench.ws.readyState !== WebSocket.OPEN);
-        const isLaunchpadDead = !cdpConnections.launchpad || (cdpConnections.launchpad.ws && cdpConnections.launchpad.ws.readyState !== WebSocket.OPEN);
+        const isLaunchpadDead = !cdpConnections.manager || (cdpConnections.manager.ws && cdpConnections.manager.ws.readyState !== WebSocket.OPEN);
 
         if (isWorkbenchDead || isLaunchpadDead) {
             if (!isConnecting) {
@@ -1423,25 +333,25 @@ async function startPolling(wss) {
                 console.log('🔄 Workbench connection lost. Attempting to reconnect...');
                 cdpConnections.workbench = null;
             }
-            if (isLaunchpadDead && cdpConnections.launchpad) {
+            if (isLaunchpadDead && cdpConnections.manager) {
                 console.log('🔄 Launchpad connection lost. Attempting to reconnect...');
-                cdpConnections.launchpad = null;
+                cdpConnections.manager = null;
             }
             
             try {
                 await initCDP();
-                if (cdpConnections.workbench && cdpConnections.launchpad) {
+                if (cdpConnections.workbench && cdpConnections.manager) {
                     console.log('✅ All CDP connections established');
                     isConnecting = false;
                 } else if (cdpConnections.workbench) {
-                    // We only need the workbench to function primarily, launchpad is a bonus
+                    // We only need the workbench to function primarily, manager is a bonus
                     isConnecting = false; 
                 }
             } catch (err) {
                 // Not found yet, just wait for next cycle
             }
             
-            // Only retry quickly if we lost workbench. If we just lost launchpad, poll normally
+            // Only retry quickly if we lost workbench. If we just lost manager, poll normally
             if (!cdpConnections.workbench) {
                 setTimeout(poll, 2000);
                 return;
@@ -1611,7 +521,7 @@ async function createServer() {
     app.get('/health', (req, res) => {
         res.json({
             status: 'ok',
-            cdpConnected: cdpConnections.workbench?.ws?.readyState === 1 || cdpConnections.launchpad?.ws?.readyState === 1,
+            cdpConnected: cdpConnections.workbench?.ws?.readyState === 1 || cdpConnections.manager?.ws?.readyState === 1,
             uptime: process.uptime(),
             timestamp: new Date().toISOString(),
             https: hasSSL
@@ -1683,7 +593,7 @@ async function createServer() {
 
     // List recent projects from Agent Manager (Launchpad)
     app.get('/api/projects', async (req, res) => {
-        if (!cdpConnections.launchpad) {
+        if (!cdpConnections.manager) {
             return res.status(503).json({ error: 'Agent Manager not connected', projects: [] });
         }
 
@@ -1714,8 +624,8 @@ async function createServer() {
 
         try {
             // Launchpad usually has only 1 context, but we check all just in case
-            for (const ctx of cdpConnections.launchpad.contexts) {
-                const result = await cdpConnections.launchpad.call("Runtime.evaluate", {
+            for (const ctx of cdpConnections.manager.contexts) {
+                const result = await cdpConnections.manager.call("Runtime.evaluate", {
                     expression: EXP,
                     returnByValue: true,
                     awaitPromise: true,
@@ -1736,7 +646,7 @@ async function createServer() {
     app.post('/api/projects/open', async (req, res) => {
         const { index, name } = req.body;
         
-        if (!cdpConnections.launchpad) {
+        if (!cdpConnections.manager) {
             return res.status(503).json({ error: 'Agent Manager not connected' });
         }
 
@@ -1776,8 +686,8 @@ async function createServer() {
         })()`;
 
         try {
-            for (const ctx of cdpConnections.launchpad.contexts) {
-                const result = await cdpConnections.launchpad.call("Runtime.evaluate", {
+            for (const ctx of cdpConnections.manager.contexts) {
+                const result = await cdpConnections.manager.call("Runtime.evaluate", {
                     expression: EXP,
                     returnByValue: true,
                     awaitPromise: true,
@@ -2219,8 +1129,8 @@ async function main() {
                 cdpConnections.workbench.ws.close();
                 console.log('   Workbench CDP connection closed');
             }
-            if (cdpConnections.launchpad?.ws) {
-                cdpConnections.launchpad.ws.close();
+            if (cdpConnections.manager?.ws) {
+                cdpConnections.manager.ws.close();
                 console.log('   Launchpad CDP connection closed');
             }
             setTimeout(() => process.exit(0), 1000);

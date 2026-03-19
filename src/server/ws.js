@@ -50,13 +50,6 @@ export function setupWebSocket(wss, {
         }
 
         console.log('📱 Client connected (Authenticated)');
-        
-        // Send initial update notification to trigger first snapshot fetch
-        ws.send(JSON.stringify({ 
-            type: 'snapshot_update', 
-            timestamp: new Date().toISOString(),
-            reason: 'initial_connect'
-        }));
 
         ws.on('close', () => {
             console.log('📱 Client disconnected');

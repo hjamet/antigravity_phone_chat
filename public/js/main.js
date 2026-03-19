@@ -7,10 +7,41 @@ import { elements, renderSnapshot, updateStateUI, toggleLayer } from './ui.js';
 import { sendMessage, stopGeneration, scrollToBottom } from './chat.js';
 import { loadHistory, startNewChat } from './history.js';
 import { loadProjects } from './projects.js';
-import { fetchWithAuth, getSSLStatus } from './api.js';
+import { fetchWithAuth } from './api.js';
 
 // Global state
 let currentFrame = null;
+
+/**
+ * Handle incoming snapshot data (from any source)
+ */
+function handleSnapshot(data) {
+    currentFrame = renderSnapshot(data);
+    if (currentFrame) scrollToBottom(currentFrame);
+}
+
+/**
+ * Fetch snapshot directly from API with retry
+ */
+async function fetchSnapshotDirect(retries = 5, delay = 1000) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const res = await fetchWithAuth(`/snapshot?t=${Date.now()}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.html) {
+                    handleSnapshot(data);
+                    console.log('✅ Snapshot loaded via direct fetch');
+                    return true;
+                }
+            }
+        } catch (e) {}
+        // Wait before retry (exponential backoff)
+        await new Promise(r => setTimeout(r, delay * (i + 1)));
+    }
+    console.warn('⚠️ Could not fetch snapshot after retries');
+    return false;
+}
 
 /**
  * Initialize the application
@@ -18,38 +49,45 @@ let currentFrame = null;
 async function init() {
     console.log('🚀 Antigravity Phone Connect Initializing...');
 
-    // 1. Initialize WebSocket
+    // 1. Initialize WebSocket (for live updates)
     initWS((message) => {
         if (message.type === 'snapshot') {
-            currentFrame = renderSnapshot(message.data);
-            if (currentFrame) scrollToBottom(currentFrame);
+            handleSnapshot(message.data);
         } else if (message.type === 'state') {
             updateStateUI(message.data);
         }
     });
 
-    // 2. Attach Event Listeners
-    elements.sendBtn.addEventListener('click', () => sendMessage(elements.chatInput.value));
+    // 2. Direct initial snapshot fetch (don't rely on WebSocket alone)
+    fetchSnapshotDirect();
+
+    // 3. Attach Event Listeners
+    elements.sendBtn?.addEventListener('click', () => sendMessage(elements.chatInput.value));
     
-    elements.chatInput.addEventListener('keydown', (e) => {
+    elements.chatInput?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             sendMessage(elements.chatInput.value);
         }
     });
 
-    elements.stopBtn.addEventListener('click', stopGeneration);
+    elements.stopBtn?.addEventListener('click', stopGeneration);
 
-    document.getElementById('newChatBtn').addEventListener('click', startNewChat);
-    document.getElementById('historyBtn').addEventListener('click', () => {
+    document.getElementById('newChatBtn')?.addEventListener('click', startNewChat);
+    document.getElementById('historyBtn')?.addEventListener('click', () => {
         loadHistory();
         toggleLayer(elements.historyLayer, true);
     });
     
     // Project handles
-    document.getElementById('projectSelectorBtn').addEventListener('click', () => {
+    document.getElementById('projectSelectorBtn')?.addEventListener('click', () => {
         loadProjects();
         toggleLayer(elements.projectsLayer, true);
+    });
+
+    // Listen for snapshot-update custom events (from history.js when selecting a chat)
+    window.addEventListener('snapshot-update', (e) => {
+        if (e.detail) handleSnapshot(e.detail);
     });
 
     // Global Close handlers for HTML onclick compatibility
@@ -62,29 +100,18 @@ async function init() {
         import('./history.js').then(m => m.selectChat(title));
     };
 
-    // SSL Helpers
-    window.enableHttps = () => {
-        if (window.location.protocol !== 'https:') {
-            window.location.href = window.location.href.replace('http:', 'https:');
-        }
-    };
-    window.dismissSslBanner = () => {
-        if (elements.sslBanner) elements.sslBanner.style.display = 'none';
-    };
+    // SSL banner: hide via Cloudflare (HTTPS is managed externally)
+    if (elements.sslBanner) {
+        elements.sslBanner.style.display = 'none';
+    }
 
     // Projects Helpers
     window.openNewWorkspace = async () => {
         try {
-            await fetchWithAuth('/new-workspace', { method: 'POST' });
+            await fetchWithAuth('/api/workspace/open', { method: 'POST' });
             window.hideProjects();
         } catch (e) {}
     };
-
-    // 3. Initial Sync
-    const ssl = await getSSLStatus();
-    if (elements.sslBanner) {
-        elements.sslBanner.style.display = ssl.isSecure ? 'none' : 'flex';
-    }
 
     // Initial state fetch
     syncState();
@@ -113,7 +140,7 @@ if (window.visualViewport) {
 }
 
 // Remote Click handling
-elements.chatContainer.addEventListener('click', async (e) => {
+elements.chatContainer?.addEventListener('click', async (e) => {
     const target = e.target.closest('div, span, p, summary, button');
     if (!target) return;
 
@@ -122,13 +149,12 @@ elements.chatContainer.addEventListener('click', async (e) => {
 
     if (isThoughtToggle) {
         const firstLine = text.split('\n')[0].trim();
-        // Index discovery logic here... (Simplified for now, can be improved)
         await fetchWithAuth('/remote-click', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 selector: target.tagName.toLowerCase(),
-                index: 0, // Should be calculated if multiple exist
+                index: 0,
                 textContent: firstLine
             })
         });

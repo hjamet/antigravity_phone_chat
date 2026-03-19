@@ -9,14 +9,47 @@
 export async function captureSnapshot(cdp) {
     if (!cdp) return null;
     const CAPTURE_SCRIPT = `(async () => {
-        const cascade = document.getElementById('conversation') || 
-                        document.querySelector('#conversation > div.relative.flex.flex-col') ||
-                        document.querySelector('[data-testid="chat-container"]') ||
-                        document.querySelector('.flex.flex-col.overflow-y-auto.grow') ||
-                        document.querySelector('#antigravity.agentSidePanelInputBox')?.closest('.flex.flex-col') ||
-                        document.body; 
+        // Strategy: find the chat message scroll area (NOT the artifacts panel)
+        // The chat messages are in a scrollable div with 'scrollbar-hide' class
+        // and high scrollHeight (lots of message content)
+        
+        let cascade = null;
+        
+        // Method 1: Find the chat message scrollable directly
+        const scrollables = Array.from(document.querySelectorAll('[class*="scrollbar-hide"][class*="overflow-y"]'))
+            .filter(el => el.scrollHeight > 200 && el.offsetWidth > 300);
+        if (scrollables.length > 0) {
+            // Pick the one with the most content
+            cascade = scrollables.sort((a, b) => b.scrollHeight - a.scrollHeight)[0];
+        }
+        
+        // Method 2: Find via inputBox ancestor, but specifically the chat split (left panel)
+        if (!cascade) {
+            const inputBox = document.getElementById('antigravity.agentSidePanelInputBox');
+            if (inputBox) {
+                // Walk up to the split layout container (flex with border-r)
+                let current = inputBox;
+                while (current && current !== document.body) {
+                    const cls = current.className || '';
+                    if (cls.includes('border-r') && current.offsetWidth > 300) {
+                        // This is the left panel of the split
+                        cascade = current;
+                        break;
+                    }
+                    current = current.parentElement;
+                }
+            }
+        }
+        
+        // Method 3: Fallback - largest scrollable area
+        if (!cascade) {
+            const allScrollables = Array.from(document.querySelectorAll('[class*="overflow-y-auto"]'))
+                .filter(el => el.scrollHeight > 300 && el.offsetWidth > 300)
+                .sort((a, b) => b.scrollHeight - a.scrollHeight);
+            cascade = allScrollables[0] || document.body;
+        }
 
-        if (!cascade) return { error: 'No suitable container found even after body fallback' };
+        if (!cascade) return { error: 'No chat container found' };
         
         const cascadeStyles = window.getComputedStyle(cascade);
         
@@ -177,9 +210,9 @@ export async function injectMessage(cdp, text) {
         const cancel = document.querySelector('[data-tooltip-id="input-send-button-cancel-tooltip"]');
         if (cancel && cancel.offsetParent !== null) return { ok:false, reason:"busy" };
 
-        const editors = [...document.querySelectorAll('#conversation [contenteditable="true"], #chat [contenteditable="true"], #cascade [contenteditable="true"]')]
-            .filter(el => el.offsetParent !== null);
-        const editor = editors.at(-1);
+        const inputBox = document.getElementById('antigravity.agentSidePanelInputBox');
+        const editor = inputBox?.querySelector('[contenteditable="true"]') || 
+                       document.querySelector('[contenteditable="true"][role="textbox"]');
         if (!editor) return { ok:false, error:"editor_not_found" };
 
         const textToInsert = ${safeText};
@@ -467,6 +500,19 @@ export async function getAppState(cdp) {
                 return false;
             }) || nodes.find(el => KNOWN.some(k => el.innerText.includes(k)) && el.innerText.length < 60);
             if (modelEl) state.model = modelEl.innerText.trim();
+            
+            // Find current workspace name from sidebar
+            const wsSection = Array.from(document.querySelectorAll('button'))
+                .find(b => (b.innerText || '').includes('keyboard_arrow_down'));
+            if (wsSection) {
+                const name = (wsSection.innerText || '')
+                    .replace(/keyboard_arrow_(down|right)/g, '')
+                    .replace(/more_vert/g, '')
+                    .replace(/add/g, '')
+                    .trim();
+                if (name) state.workspace = name;
+            }
+            
             return state;
         } catch(e) { return { error: e.toString() }; }
     })()`;
@@ -625,20 +671,42 @@ export async function listProjects(cdp) {
     const EXP = `(async () => {
         try {
             const projects = [];
-            const items = document.querySelectorAll('div.px-2\\\\.5.cursor-pointer');
+            // The sidebar contains workspace sections with class 'flex flex-col gap-1.5'
+            // Each workspace has a header with the workspace name and a list of conversations
+            // Look for elements that have 'keyboard_arrow_down' as a sibling (workspace toggle)
+            const allButtons = Array.from(document.querySelectorAll('button'));
             
-            items.forEach((item, index) => {
-                const nameSpan = item.querySelector('span.text-sm > span');
-                const pathSpan = item.querySelector('span.text-xs.opacity-50 > span');
-                
-                if (nameSpan) {
-                    projects.push({
-                        index: index,
-                        name: nameSpan.innerText.trim(),
-                        path: pathSpan ? pathSpan.innerText.trim() : ''
-                    });
-                }
+            // Find workspace header buttons (they contain the workspace name + arrow icon)
+            const wsHeaders = allButtons.filter(b => {
+                const text = b.innerText || '';
+                return text.includes('keyboard_arrow_down') || text.includes('keyboard_arrow_right');
             });
+            
+            // If no headers found, try finding workspace names from the sidebar sections
+            if (wsHeaders.length === 0) {
+                // Alternative: look for sidebar sections with workspace names
+                const sidebarItems = Array.from(document.querySelectorAll('[class*="flex"][class*="gap"]'))
+                    .filter(el => el.offsetWidth < 300 && el.offsetWidth > 100 && el.offsetHeight > 50);
+                
+                sidebarItems.forEach((item, index) => {
+                    const text = item.innerText?.trim();
+                    if (text && text.length < 100 && !text.includes('Start new') && !text.includes('Chat History')) {
+                        const name = text.split('\\n')[0]?.trim();
+                        if (name && name.length > 1 && name.length < 50) {
+                            projects.push({ index, name, path: '' });
+                        }
+                    }
+                });
+            } else {
+                wsHeaders.forEach((header, index) => {
+                    const text = header.innerText || '';
+                    const name = text.replace(/keyboard_arrow_(down|right)/g, '').replace(/more_vert/g, '').trim();
+                    if (name && name.length > 0) {
+                        projects.push({ index, name, path: '' });
+                    }
+                });
+            }
+            
             return { success: true, projects };
         } catch (err) { return { error: err.toString() }; }
     })()`;

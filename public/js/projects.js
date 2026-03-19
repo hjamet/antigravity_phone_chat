@@ -3,14 +3,14 @@
  */
 
 import { fetchWithAuth } from './api.js';
-import { elements, toggleModal } from './ui.js';
+import { elements, toggleLayer } from './ui.js';
 
 /**
  * Load and display projects/workspaces
  */
 export async function loadProjects() {
     try {
-        const res = await fetchWithAuth('/projects');
+        const res = await fetchWithAuth('/api/projects');
         const data = await res.json();
         
         if (data && Array.isArray(data)) {
@@ -30,14 +30,19 @@ function renderProjects(projects) {
     
     container.innerHTML = '';
     
-    projects.forEach(project => {
+    if (projects.length === 0) {
+        container.innerHTML = '<div style="padding: 20px; text-align: center; opacity: 0.6;">No projects found</div>';
+        return;
+    }
+
+    projects.forEach((project, index) => {
         const item = document.createElement('div');
         item.className = 'project-item';
         item.innerHTML = `
-            <div class="project-name">${project.name}</div>
-            <div class="project-path">${project.path}</div>
+            <div class="project-name">${project.name || project}</div>
+            <div class="project-path">${project.path || ''}</div>
         `;
-        item.onclick = () => selectProject(project);
+        item.onclick = () => selectProject({ index, name: project.name || project });
         container.appendChild(item);
     });
 }
@@ -46,9 +51,9 @@ function renderProjects(projects) {
  * Select/Open a project
  */
 export async function selectProject(project) {
-    toggleModal('project-modal', false);
+    toggleLayer(elements.projectsLayer, false);
     try {
-        await fetchWithAuth('/open-project', {
+        await fetchWithAuth('/api/projects/open', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(project)

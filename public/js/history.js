@@ -3,7 +3,7 @@
  */
 
 import { fetchWithAuth } from './api.js';
-import { elements, toggleModal } from './ui.js';
+import { elements, toggleLayer } from './ui.js';
 
 /**
  * Load and display chat history
@@ -63,13 +63,23 @@ function renderHistory(chats) {
  * Select a chat from history
  */
 export async function selectChat(title) {
-    toggleModal('history-modal', false);
+    toggleLayer(elements.historyLayer, false);
     try {
-        await fetchWithAuth('/select-chat', {
+        const res = await fetchWithAuth('/select-chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title })
         });
+        // Force a snapshot refresh after selecting a chat
+        setTimeout(async () => {
+            try {
+                const snapRes = await fetchWithAuth(`/snapshot?t=${Date.now()}`);
+                const data = await snapRes.json();
+                if (data && !data.error) {
+                    window.dispatchEvent(new CustomEvent('snapshot-update', { detail: data }));
+                }
+            } catch(e) {}
+        }, 1000);
     } catch (e) {
         console.error('Select chat error:', e);
     }

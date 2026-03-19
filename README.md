@@ -24,17 +24,18 @@ Les variables d'environnement sont gérées dans le fichier `.env` :
 
 ## 4. # Description détaillée
 L'application agit comme un proxy intelligent :
-- **Backend (Node.js)** : Architecture modulaire. Utilise des scripts CDP extraits (`src/cdp/`) pour piloter le Workbench et l'Agent Manager (renommé "Manager" dans le code).
+- **Backend (Node.js)** : Architecture ultra-modulaire. `server.js` est un bootstrap léger déléguant aux modules `src/server/routes.js` (API) et `src/server/ws.js` (WebSockets).
+- **Scripts CDP** : Logique d'interaction extraite dans `src/cdp/manager.js` (Chat & Projets) et `src/cdp/workbench.js` (UI Workbench).
 - **Tunneling (Cloudflare)** : Expose l'interface mobile via un tunnel sécurisé avec mot de passe.
 - **Frontend (ES Modules)** : Interface découpée en modules indépendants (`public/js/`) pour une meilleure maintenance.
 
 ## 5. # Principaux résultats
 | Feature | État | Source de vérité |
 |---------|------|------------------|
-| Chat Reflection | ✅ Stable | Workbench CDP |
+| Chat Reflection | ✅ Stable | Agent Manager CDP |
 | Chat History | ✅ Enrichi | Agent Manager CDP |
 | Project Selector | ✅ Stable | Agent Manager CDP |
-| Mode/Model Sync | ✅ Stable | Workbench CDP |
+| Mode/Model Sync | ✅ Stable | Agent Manager CDP |
 
 ## 6. # Documentation Index
 | Titre (Lien) | Description |
@@ -46,11 +47,12 @@ L'application agit comme un proxy intelligent :
 ```text
 .
 ├── src/
-│   └── cdp/            # Scripts d'injection CDP modularisés
+│   ├── cdp/            # Scripts d'injection CDP modularisés
+│   └── server/         # Logique serveur (Routes & WebSockets)
 ├── public/
 │   └── js/             # Frontend modulaire (ESM)
 ├── certs/              # Certificats SSL auto-signés
-├── server.js           # Serveur de bridge (EntryPoint)
+├── server.js           # Serveur de bridge (EntryPoint - Bootstrap)
 └── startup_scripts/    # Utilitaires de lancement
 ```
 
@@ -77,8 +79,9 @@ L'application agit comme un proxy intelligent :
 | 6 | Cleanup UI Mobile | ✅ Fait | [cleanup-ui-mobile.md](docs/tasks/cleanup-ui-mobile.md) |
 | 7 | Interface Projets Mobile | ✅ Fait | [project-selector-ui.md](docs/tasks/project-selector-ui.md) |
 | 8 | **Refactoring Structurel** | ✅ Fait | [structural-refactoring.md](docs/tasks/structural-refactoring.md) |
-| 9 | **Migration Agent Manager** | 🟡 À faire | [agent-manager-refactoring.md](docs/tasks/agent-manager-refactoring.md) |
-| 10 | **Extraction Routes Express** | 🟡 À faire | [extract-express-routes.md](docs/tasks/extract-express-routes.md) |
+| 9 | **Migration Agent Manager** | ✅ Fait | [agent-manager-refactoring.md](docs/tasks/agent-manager-refactoring.md) |
+| 10 | **Extraction Routes Express** | ✅ Fait | [extract-express-routes.md](docs/tasks/extract-express-routes.md) |
+| 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

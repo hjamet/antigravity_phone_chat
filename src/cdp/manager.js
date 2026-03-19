@@ -60,42 +60,51 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                         
                         const te = iso.querySelector('h1, h2, h3, h4, strong, b');
                         if (te) { const t = (te.innerText||'').trim(); if (t.length > 5 && t.length < 150) tt2 = t; }
-                        
                         for (const c of ch) {
                             const ct = (c.innerText || '').trim();
                             const cc = (c.className || '').toString();
                             if (ct.length < 3) continue;
-                            const isProg = ct.includes('Progress Updates') || cc.includes('border-t');
-                            const isFile = ct.startsWith('Files Edited') || ct.startsWith('Background Steps');
+                            
+                            // border-t sections: Files Edited, Background Steps, Progress Updates
+                            // We ONLY want Progress Updates — skip the rest entirely
+                            if (cc.includes('border-t')) {
+                                // Check the first child's text to identify the section type
+                                const firstChildText = c.children[0] ? (c.children[0].innerText || '').trim() : '';
+                                if (firstChildText.startsWith('Files Edited') || firstChildText.startsWith('Background Steps')) {
+                                    continue; // Skip noise sections completely
+                                }
+                                // Only process if this is actually Progress Updates
+                                if (!ct.includes('Progress Updates') && !firstChildText.includes('Progress Updates')) {
+                                    continue;
+                                }
+                            }
+                            
+                            const isProg = ct.includes('Progress Updates');
                             if (isProg) {
                                 ct.split('\\n').filter(l => l.trim().length > 5).forEach(l => {
                                     const tr = l.trim().replace(/content_copy/g, '').replace(/thumb_up/g, '').replace(/thumb_down/g, '').trim();
                                     if (tr !== 'Progress Updates' && tr !== 'Collapse all' && !/^\\d+$/.test(tr) && tr.length > 10 && tr.length < 200) {
-                                        // Expanded noise filter
                                         const noisePatterns = [
                                             'Files Edited', 'Background Steps', 'Running command', 'Ran command', 'Thought for ',
                                             'Running background', 'Exit code', 'Always run', 'Cancel',
                                             'Edited', 'Created', 'Deleted', 'Analyzed', 'Viewing',
                                             '=== ', '{"', '📸 ', '✅ ', '❌ ', '💾 ', '🔍 ', '🚀 ', '⚠️ ',
-                                            '…\\\\\\\\\\\\\\\\', 'Output snapshot', 'The command',
+                                            'Output snapshot', 'The command',
                                             'Successfully', 'No output',
                                             'Expand all', 'Collapse all', 'Show more', 'Show less',
                                             'Step Id:', 'tool call', 'Saved', 'Cau...', 'Read '
                                         ];
                                         const isNoise = noisePatterns.some(p => tr.startsWith(p) || tr === p);
-                                        const isBareFilename = /^[a-zA-Z0-9_\\\\-]+\\.(js|ts|md|json|py|css|html)(#L\\d+.*)?$/.test(tr);
+                                        const isBareFilename = /^[a-zA-Z0-9_\\-]+\\.(js|ts|md|json|py|css|html)(#L\\d+.*)?$/.test(tr);
                                         const isSingleWord = tr.split(' ').length <= 2 && tr.length < 30;
                                         const isPath = tr.includes('\\\\') && !tr.includes(' ');
-                                        const isSentence = tr.includes('. ') || tr.endsWith('.') || tr.endsWith(':') || tr.endsWith('!') || tr.endsWith('?');
-                                        const isTooLong = tr.length > 90 || tr.split(' ').length >= 12;
                                         
-                                        if (!isNoise && !isBareFilename && !isSingleWord && !isPath && !isSentence && !isTooLong && !/^\\{.*\\}$/.test(tr)) {
+                                        if (!isNoise && !isBareFilename && !isSingleWord && !isPath && !/^\\{.*\\}$/.test(tr)) {
                                             pts.push(tr);
                                         }
                                     }
                                 });
-                            } else if (isFile) { continue; }
-                            else if (!mp && ct.length > 15) {
+                            } else if (!mp && ct.length > 15) {
                                 const cl = c.cloneNode(true);
                                 cl.querySelectorAll('button,[role="button"],.google-symbols,style,details').forEach(n=>n.remove());
                                 
@@ -139,9 +148,9 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                                 cl.remove();
                             }
                         }
-                        if (mp && mp.length > 15) {
+                        if ((mp && mp.length > 15) || (tt2 && tt2.length > 5) || pts.length > 0) {
                             const currentStatus = pts.length > 0 ? pts[pts.length - 1] : '';
-                            const k = 'tb:' + (tt2 || '') + ':' + mp.substring(0, 80);
+                            const k = 'tb:' + (tt2 || '') + ':' + (mp ? mp.substring(0, 80) : pts.join('').substring(0, 80));
                             if (!seen.has(k)) {
                                 seen.add(k);
                                 collected.push({

@@ -188,15 +188,51 @@ export class ChatHistoryService {
             isStreaming: this.isStreaming,
             messageCount: this.chatTimeline.length,
             
-            // Full ordered message list (text only, no HTML)
+            // Full ordered message list
             messages: this.chatTimeline.map(m => ({
                 role: m.role || 'agent',
                 type: m.type,
                 content: m.content || m.taskSummary || null,
+                html: m.html || m.taskSummaryHtml || null,
                 title: m.taskTitle || null,
-                subtitles: m.allStatuses || undefined
+                status: m.taskStatus || null,
+                allStatuses: ChatHistoryService._filterCleanStatuses(m.allStatuses || [])
             }))
         };
+    }
+
+    /**
+     * Filter allStatuses to only keep real TaskStatus lines.
+     * Real TaskStatus values are set by task_boundary calls and follow a strict pattern:
+     *   - Start with an -ing gerund verb ("Analyzing...", "Restarting...", "Updating...")
+     *   - Are 20-150 chars long, clean declarative phrases
+     *   - Never contain code, punctuation runs, JSON, paths, or conversational text
+     */
+    static _filterCleanStatuses(statuses) {
+        return statuses.filter(s => {
+            if (!s || s.length < 15 || s.length > 150) return false;
+            
+            // Must start with a capitalized word (TaskStatus always starts cleanly)
+            if (!/^[A-Z][a-z]/.test(s)) return false;
+            
+            // Reject anything with code/structural patterns
+            if (/[{}()\[\]"'`\\<>;=]/.test(s)) return false;
+            
+            // Reject lines with colons (like "STATUS:", "TITLE:", "cls:")
+            if (s.includes(':')) return false;
+            
+            // Reject conversational text (reasoning, questions, explanations)
+            if (/^(Now |But |Also |The |I |This |Still |However |Wait|Looking|Found )/i.test(s)) return false;
+            if (/^(Let me|I need|I can|I see|That means|Need to)+/i.test(s)) return false;
+            
+            // Must have at least 4 words (real statuses are descriptive phrases)
+            if (s.split(' ').length < 4) return false;
+            
+            // Reject if it ends with common noise patterns
+            if (/\.\.\.$/.test(s)) return false;
+            
+            return true;
+        });
     }
 }
 

@@ -26,8 +26,11 @@ export const elements = {
 let lastRenderedHash = '';
 
 /**
- * Render chat state from /api/chat-state response
- * Uses incremental DOM updates to avoid flicker
+ * Render chat state from /api/chat-state response.
+ * Performs STRICT incremental DOM updates:
+ *  - Only touched when hash changes.
+ *  - Existing elements are updated via innerHTML only (no className reassignment).
+ *  - New elements get a one-time fade-in class.
  */
 export function renderChatState(state) {
     if (!state) return;
@@ -37,8 +40,10 @@ export function renderChatState(state) {
     
     const messages = state.messages || [];
     
-    // Build hash for change detection
-    const hash = messages.map(m => `${m.type}:${m.role}:${(m.content||'').substring(0,40)}:${(m.title||'')}:${m.subtitles?.length||0}`).join('|') + (state.isStreaming ? ':S' : ':X');
+    // Build a stable hash for coarse change detection
+    const hash = messages.map(m =>
+        `${m.type}:${m.role}:${(m.title||'')}:${m.allStatuses?.length||0}:${(m.content||'').length}`
+    ).join('|') + (state.isStreaming ? ':S' : ':X');
     
     if (hash === lastRenderedHash) return;
     lastRenderedHash = hash;
@@ -58,23 +63,20 @@ export function renderChatState(state) {
         const msgHash = getMessageHash(msg);
         
         if (i < existing.length) {
+            // Only update innerHTML if hash differs — never touch className
             if (existing[i].getAttribute('data-hash') !== msgHash) {
-                // Update existing element in-place to avoid triggering CSS animations
-                const temp = document.createElement('div');
-                temp.innerHTML = buildMessageHtml(msg);
-                const newEl = temp.firstElementChild;
-                
-                existing[i].innerHTML = newEl.innerHTML;
-                existing[i].className = newEl.className;
+                existing[i].innerHTML = buildMessageInner(msg);
                 existing[i].setAttribute('data-hash', msgHash);
             }
         } else {
-            // Append new element
-            const temp = document.createElement('div');
-            temp.innerHTML = buildMessageHtml(msg);
-            const newEl = temp.firstElementChild;
-            newEl.setAttribute('data-hash', msgHash);
-            container.appendChild(newEl);
+            // Brand new element — create with fade-in
+            const div = document.createElement('div');
+            div.className = getCssClass(msg) + ' chat-msg-enter';
+            div.innerHTML = buildMessageInner(msg);
+            div.setAttribute('data-hash', msgHash);
+            container.appendChild(div);
+            // Remove one-time animation class after it completes
+            div.addEventListener('animationend', () => div.classList.remove('chat-msg-enter'), { once: true });
         }
     }
     
@@ -96,10 +98,19 @@ export function renderChatState(state) {
 }
 
 /**
+ * Get CSS class for a message type (without animation classes)
+ */
+function getCssClass(msg) {
+    if (msg.role === 'user') return 'chat-msg user-msg';
+    if (msg.type === 'taskBlock') return 'chat-msg task-msg';
+    return 'chat-msg agent-msg';
+}
+
+/**
  * Generate a simple hash from message contents
  */
 function getMessageHash(msg) {
-    const s = `${msg.type}:${msg.role}:${(msg.content||'').substring(0,60)}:${(msg.title||'')}:${msg.subtitles?.length||0}`;
+    const s = `${msg.type}:${msg.role}:${(msg.content||'').substring(0,60)}:${(msg.html||'').length}:${msg.title||''}:${msg.status||''}:${msg.allStatuses?.length||0}`;
     let hash = 0;
     for (let i = 0; i < s.length; i++) {
         hash = Math.imul(31, hash) + s.charCodeAt(i) | 0;
@@ -108,38 +119,75 @@ function getMessageHash(msg) {
 }
 
 /**
- * Build HTML string for a message (no DOM creation, just string)
+ * Filter out noise from allStatuses (terminal commands, system events)
  */
-function buildMessageHtml(msg) {
+function isCleanStatus(s) {
+    if (!s || s.length < 5) return false;
+    if (s.includes('> ') && s.includes('node ')) return false;
+    if (s.includes('Client connected') || s.includes('Client disconnected')) return false;
+    if (s.includes('\\') && !s.includes(' ')) return false;
+    if (/^…?\\/.test(s)) return false;
+    if (s.startsWith('Running command')) return false;
+    return true;
+}
+
+/**
+ * Build the INNER HTML of a message div (not the wrapper).
+ * The wrapper div is created separately so we never reassign className.
+ */
+function buildMessageInner(msg) {
+    const renderContent = (m) => {
+        if (m.html) {
+            return m.html.replace(/<style[\s\S]*?<\/style>/g, '')
+                         .replace(/<button[^>]*data-tooltip-id[^>]*>[\s\S]*?<\/button>/g, '')
+                         .replace(/<span[^>]*class="[^"]*google-symbols[^"]*"[^>]*>[\s\S]*?<\/span>/g, '')
+                         .replace(/\bcontent_copy\b/g, '')
+                         .replace(/\bthumb_up\b/g, '')
+                         .replace(/\bthumb_down\b/g, '');
+        }
+        return formatMarkdown(m.content);
+    };
+
     if (msg.role === 'user') {
-        return `<div class="chat-msg user-msg"><div class="msg-label">You</div><div class="msg-body">${escapeHtml(msg.content || '')}</div></div>`;
+        return `<div class="msg-label">You</div><div class="msg-body">${formatMarkdown(msg.content)}</div>`;
     } else if (msg.type === 'taskBlock') {
-        let html = '<div class="chat-msg task-msg">';
+        let html = '';
         if (msg.title) html += `<div class="task-title">🎯 ${escapeHtml(msg.title)}</div>`;
-        if (msg.content) html += `<div class="task-paragraph">${escapeHtml(msg.content)}</div>`;
-        if (msg.subtitles && msg.subtitles.length > 0) {
+        
+        // Paragraph (TaskSummary) right after the title
+        if (msg.html || msg.content) html += `<div class="task-paragraph">${renderContent(msg)}</div>`;
+        
+        // Numbered subtitle list BELOW the paragraph
+        const cleanStatuses = (msg.allStatuses || []).filter(isCleanStatus);
+        if (cleanStatuses.length > 0) {
             html += '<div class="task-steps">';
-            msg.subtitles.forEach((s, i) => {
-                if (s) html += `<div class="task-step"><span class="step-num">${i + 1}</span>${escapeHtml(s)}</div>`;
+            cleanStatuses.forEach((s, i) => {
+                html += `<div class="task-step"><span class="step-num">${i + 1}</span><span class="step-text">${formatMarkdown(s, true)}</span></div>`;
             });
             html += '</div>';
         }
-        html += '</div>';
+        
         return html;
     } else {
-        return `<div class="chat-msg agent-msg"><div class="msg-label">Agent</div><div class="msg-body">${formatAgentText(msg.content || '')}</div></div>`;
+        return `<div class="msg-label">Agent</div><div class="msg-body">${renderContent(msg)}</div>`;
     }
 }
 
 /**
- * Format agent text with basic markdown-like rendering
+ * Format markdown using marked.js if available, fallback to basic formatting
  */
-function formatAgentText(text) {
-    return escapeHtml(text)
-        .replace(/\n\n/g, '</p><p>')
-        .replace(/\n/g, '<br>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+function formatMarkdown(text, inline = false) {
+    if (!text) return '';
+    try {
+        if (typeof marked !== 'undefined') {
+            return inline ? marked.parseInline(text) : marked.parse(text);
+        }
+    } catch(e) {}
+    
+    // Fallback format
+    const escaped = escapeHtml(text);
+    if (inline) return escaped;
+    return escaped.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>').replace(/`([^`]+)`/g, '<code>$1</code>');
 }
 
 /**
@@ -152,20 +200,25 @@ function escapeHtml(text) {
 }
 
 /**
- * Show/hide streaming indicator
+ * Show/hide streaming indicator via CSS transition (no DOM destruction)
  */
 function updateStreamingIndicator(isStreaming) {
     let indicator = document.getElementById('streamingIndicator');
-    if (isStreaming) {
-        if (!indicator) {
-            indicator = document.createElement('div');
-            indicator.id = 'streamingIndicator';
-            indicator.className = 'streaming-indicator';
-            indicator.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+    if (!indicator && elements.chatContent) {
+        indicator = document.createElement('div');
+        indicator.id = 'streamingIndicator';
+        indicator.className = 'streaming-indicator';
+        indicator.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+        elements.chatContent.appendChild(indicator);
+    }
+    
+    if (indicator) {
+        if (isStreaming) {
+            indicator.classList.add('active');
             elements.chatContent?.appendChild(indicator);
+        } else {
+            indicator.classList.remove('active');
         }
-    } else {
-        indicator?.remove();
     }
 }
 
@@ -173,12 +226,10 @@ function updateStreamingIndicator(isStreaming) {
  * LEGACY: renderSnapshot for backward compatibility with WS updates
  */
 export function renderSnapshot(data) {
-    // If it looks like a chat-state response, use the new renderer
     if (data?.messages && data.messages[0]?.type) {
         return renderChatState(data);
     }
     
-    // Legacy fallback
     const container = elements.chatContent;
     if (!container || !data) return;
     
@@ -206,7 +257,6 @@ export function updateStateUI(state) {
     if (elements.statusText) {
         elements.statusText.textContent = state.workspace || 'Connected';
     }
-    // Fix stuck "Connecting..." and "Syncing..." labels
     const projectStatus = document.getElementById('currentProjectStatus');
     if (projectStatus) {
         projectStatus.textContent = state.workspace ? 'Connected' : 'Online';

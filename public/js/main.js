@@ -3,12 +3,12 @@
  * Phase 5: Polls /api/chat-state every second as primary update mechanism
  */
 
-import { initWS } from './ws.js';
-import { elements, renderChatState, renderSnapshot, updateStateUI, toggleLayer } from './ui.js';
-import { sendMessage, stopGeneration, scrollToBottom } from './chat.js';
-import { loadHistory, startNewChat } from './history.js';
-import { loadProjects } from './projects.js';
-import { fetchWithAuth } from './api.js';
+import { initWS } from './ws.js?v=4';
+import { elements, renderChatState, renderSnapshot, updateStateUI, toggleLayer } from './ui.js?v=4';
+import { sendMessage, stopGeneration, scrollToBottom } from './chat.js?v=4';
+import { loadHistory, startNewChat } from './history.js?v=4';
+import { loadProjects } from './projects.js?v=4';
+import { fetchWithAuth } from './api.js?v=4';
 
 /**
  * Poll /api/chat-state and render

@@ -30,17 +30,22 @@ function renderProjects(projects) {
     
     container.innerHTML = '';
     
-    if (projects.length === 0) {
-        container.innerHTML = '<div style="padding: 20px; text-align: center; opacity: 0.6;">No projects found</div>';
+    if (!projects || projects.length === 0) {
+        container.innerHTML = `
+            <div class="history-state-container">
+                <div class="history-state-icon">📁</div>
+                <div class="history-state-title">No Workspaces Found</div>
+                <div class="history-state-desc">Open a project folder to start chatting with Antigravity.</div>
+            </div>`;
         return;
     }
 
     projects.forEach((project, index) => {
         const item = document.createElement('div');
-        item.className = 'project-item';
+        item.className = 'project-card';
         item.innerHTML = `
-            <div class="project-name">${project.name || project}</div>
-            <div class="project-path">${project.path || ''}</div>
+            <div class="project-card-title">${project.name || project}</div>
+            <div class="project-card-path">${project.path || 'Workspace'}</div>
         `;
         item.onclick = () => selectProject({ index, name: project.name || project });
         container.appendChild(item);

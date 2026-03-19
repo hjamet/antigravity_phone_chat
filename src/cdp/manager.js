@@ -6,182 +6,139 @@
 /**
  * Capture a snapshot of the current chat UI from the Manager
  */
-export async function captureSnapshot(cdp) {
+export async function captureSnapshot(cdp, options = { fullScroll: false }) {
     if (!cdp) return null;
+    const fullScroll = !!options.fullScroll;
+
     const CAPTURE_SCRIPT = `(async () => {
-        // Strategy: find the chat message scroll area (NOT the artifacts panel)
-        // The chat messages are in a scrollable div with 'scrollbar-hide' class
-        // and high scrollHeight (lots of message content)
-        
-        let cascade = null;
-        
-        // Method 1: Find the chat message scrollable directly
-        const scrollables = Array.from(document.querySelectorAll('[class*="scrollbar-hide"][class*="overflow-y"]'))
-            .filter(el => el.scrollHeight > 200 && el.offsetWidth > 300);
-        if (scrollables.length > 0) {
-            // Pick the one with the most content
-            cascade = scrollables.sort((a, b) => b.scrollHeight - a.scrollHeight)[0];
-        }
-        
-        // Method 2: Find via inputBox ancestor, but specifically the chat split (left panel)
-        if (!cascade) {
-            const inputBox = document.getElementById('antigravity.agentSidePanelInputBox');
-            if (inputBox) {
-                // Walk up to the split layout container (flex with border-r)
-                let current = inputBox;
-                while (current && current !== document.body) {
-                    const cls = current.className || '';
-                    if (cls.includes('border-r') && current.offsetWidth > 300) {
-                        // This is the left panel of the split
-                        cascade = current;
-                        break;
-                    }
-                    current = current.parentElement;
+        try {
+            // Find the chat scroll container (scrollbar-hide class, largest scrollHeight)
+            const chatScroll = Array.from(document.querySelectorAll('[class*="scrollbar-hide"][class*="overflow-y"]'))
+                .filter(el => el.scrollHeight > 100 && el.offsetWidth > 200)
+                .sort((a,b) => b.scrollHeight - a.scrollHeight)[0];
+            
+            if (!chatScroll) return { error: 'No chat scroll container found' };
+            
+            // Navigate to the turns container
+            const wrapper = chatScroll.children[0];
+            if (!wrapper) return { error: 'No wrapper found' };
+            
+            let turnsContainer = wrapper;
+            if (wrapper.children[0]) {
+                const candidate = wrapper.children[0];
+                const cls = candidate.className || '';
+                if (cls.includes('flex') && cls.includes('gap')) {
+                    turnsContainer = candidate;
                 }
             }
-        }
-        
-        // Method 3: Fallback - largest scrollable area
-        if (!cascade) {
-            const allScrollables = Array.from(document.querySelectorAll('[class*="overflow-y-auto"]'))
-                .filter(el => el.scrollHeight > 300 && el.offsetWidth > 300)
-                .sort((a, b) => b.scrollHeight - a.scrollHeight);
-            cascade = allScrollables[0] || document.body;
-        }
-
-        if (!cascade) return { error: 'No chat container found' };
-        
-        const cascadeStyles = window.getComputedStyle(cascade);
-        
-        // Find the main scrollable container
-        const scrollContainer = cascade.querySelector('.overflow-y-auto, [data-scroll-area]') || cascade;
-        const scrollInfo = {
-            scrollTop: scrollContainer.scrollTop,
-            scrollHeight: scrollContainer.scrollHeight,
-            clientHeight: scrollContainer.clientHeight,
-            scrollPercent: scrollContainer.scrollTop / (scrollContainer.scrollHeight - scrollContainer.clientHeight) || 0
-        };
-        
-        // Clone cascade to modify it without affecting the original
-        const clone = cascade.cloneNode(true);
-        
-        // Aggressively remove the entire interaction/input/review area
-        try {
-            const interactionSelectors = [
-                '.relative.flex.flex-col.gap-8',
-                '.flex.grow.flex-col.justify-start.gap-8',
-                'div[class*="interaction-area"]',
-                '.p-1.bg-gray-500\\\\/10',
-                '.outline-solid.justify-between',
-                '[contenteditable="true"]'
-            ];
-
-            interactionSelectors.forEach(selector => {
-                clone.querySelectorAll(selector).forEach(el => {
-                    try {
-                        if (selector === '[contenteditable="true"]') {
-                            const area = el.closest('.relative.flex.flex-col.gap-8') || 
-                                         el.closest('.flex.grow.flex-col.justify-start.gap-8') ||
-                                         el.closest('div[id^="interaction"]') ||
-                                         el.parentElement?.parentElement;
-                            if (area && area !== clone) area.remove();
-                            else el.remove();
-                        } else {
-                            el.remove();
-                        }
-                    } catch(e) {}
-                });
-            });
-
-            const allElements = clone.querySelectorAll('*');
-            allElements.forEach(el => {
-                try {
-                    const text = (el.innerText || '').toLowerCase();
-                    if (text.includes('review changes') || text.includes('files with changes') || text.includes('context found')) {
-                        if (el.children.length < 10 || el.querySelector('button') || el.classList?.contains('justify-between')) {
-                            el.style.display = 'none'; 
-                            el.remove();
-                        }
-                    }
-                } catch (e) {}
-            });
-        } catch (globalErr) { }
-
-        // Convert local images to base64
-        const images = clone.querySelectorAll('img');
-        const promises = Array.from(images).map(async (img) => {
-            const rawSrc = img.getAttribute('src');
-            if (rawSrc && (rawSrc.startsWith('/') || rawSrc.startsWith('vscode-file:')) && !rawSrc.startsWith('data:')) {
-                try {
-                    const res = await fetch(rawSrc);
-                    const blob = await res.blob();
-                    await new Promise(r => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => { img.src = reader.result; r(); };
-                        reader.onerror = () => r();
-                        reader.readAsDataURL(blob);
-                    });
-                } catch(e) {}
+            
+            const originalScroll = chatScroll.scrollTop;
+            const scrollStep = chatScroll.clientHeight * 0.7;
+            const seenIndices = new Set();
+            const messages = [];
+            const doFullScroll = ${fullScroll};
+            
+            let scrollPos = doFullScroll ? 0 : chatScroll.scrollTop;
+            const maxIterations = doFullScroll ? 50 : 1; 
+            let iterations = 0;
+            
+            if (doFullScroll && chatScroll.scrollTop !== 0) {
+                chatScroll.scrollTop = 0;
+                await new Promise(r => setTimeout(r, 200));
             }
-        });
-        await Promise.all(promises);
-
-        // Fix inline file references
-        try {
-            const inlineTags = new Set(['SPAN', 'P', 'A', 'LABEL', 'EM', 'STRONG', 'CODE']);
-            const allDivs = Array.from(clone.querySelectorAll('div'));
-            for (const div of allDivs) {
-                try {
-                    if (!div.parentNode) continue;
-                    const parent = div.parentElement;
-                    if (!parent) continue;
+            
+            while (iterations < maxIterations) {
+                if (doFullScroll) {
+                    chatScroll.scrollTop = scrollPos;
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                
+                const turns = Array.from(turnsContainer.children);
+                
+                for (let i = 0; i < turns.length; i++) {
+                    if (seenIndices.has(i) && doFullScroll) continue;
+                    const turn = turns[i];
+                    const text = (turn.innerText || '').trim();
+                    if (!text || text.length < 2) continue;
                     
-                    const parentIsInline = inlineTags.has(parent.tagName) || 
-                        (parent.className && (parent.className.includes('inline-flex') || parent.className.includes('inline-block')));
-                        
-                    if (parentIsInline) {
-                        const span = document.createElement('span');
-                        while (div.firstChild) {
-                            span.appendChild(div.firstChild);
-                        }
-                        if (div.className) span.className = div.className;
-                        if (div.getAttribute('style')) span.setAttribute('style', div.getAttribute('style'));
-                        span.style.display = 'inline-flex';
-                        span.style.alignItems = 'center';
-                        span.style.verticalAlign = 'middle';
-                        div.replaceWith(span);
-                    }
-                } catch(e) {}
-            }
-        } catch(e) {}
-        
-        const html = clone.outerHTML;
-        
-        const rules = [];
-        for (const sheet of document.styleSheets) {
-            try {
-                for (const rule of sheet.cssRules) {
-                    rules.push(rule.cssText);
-                }
-            } catch (e) { }
-        }
-        const allCSS = rules.join('\\\\n');
-        
-        return {
-            html: html,
-            css: allCSS,
-            backgroundColor: cascadeStyles.backgroundColor,
-            color: cascadeStyles.color,
-            fontFamily: cascadeStyles.fontFamily,
-            scrollInfo: scrollInfo,
-            stats: {
-                nodes: clone.getElementsByTagName('*').length,
-                htmlSize: html.length,
-                cssSize: allCSS.length
-            }
-        };
-    })()`;
+                    seenIndices.add(i);
+                    
+                    // Determine role
+                    const hasMarkdown = !!turn.querySelector('p, pre, code, table, ul, ol, h1, h2, h3, h4, blockquote');
+                    let role = (hasMarkdown || text.length > 2000) ? 'agent' : 'user';
+                    
+                    // Clean content: remove feedback/copy buttons from HTML
+                    let contentHtml = '';
+                    const children = Array.from(turn.children);
+                    
+                    if (role === 'agent') {
+                        const contentDivs = children.filter(c => (c.innerText || '').length > 10);
+                        if (contentDivs.length > 0) {
+                            const mainContent = contentDivs.sort((a,b) => (b.innerText?.length || 0) - (a.innerText?.length || 0))[0];
+                            // Clone and remove button elements (copy, thumbs up/down, retry arrows) AND technical blocks
+                            const clone = mainContent.cloneNode(true);
+                            
+                            // Remove ALL Technical blocks (Thoughts, Tool calls, Logs) which are in <details> tags in Cline
+                            clone.querySelectorAll('details').forEach(el => el.remove());
+                            
+                            // Remove terminal output blocks which are often <div class="font-mono">
+                            clone.querySelectorAll('.font-mono, .code-block-wrapper pre').forEach(el => {
+                                const txt = (el.innerText || '').trim();
+                                if (txt.startsWith('[') && txt.includes(']')) el.remove(); 
+                            });
 
+                            // Remove ALL buttons, interactive controls, and raw icons
+                            clone.querySelectorAll('button, [role="button"], .google-symbols').forEach(el => el.remove());
+                            
+                            contentHtml = clone.innerHTML || '';
+                        } else {
+                            contentHtml = turn.innerHTML;
+                        }
+                    }
+                    
+                    // Also clean the text content
+                    let cleanText = text
+                        .replace(/content_copy/g, '')
+                        .replace(/thumb_up/g, '')
+                        .replace(/thumb_down/g, '')
+                        .trim();
+                    
+                    messages.push({
+                        role,
+                        content: cleanText,
+                        html: contentHtml.substring(0, 50000),
+                    });
+                }
+                
+                if (!doFullScroll) break;
+                
+                scrollPos += scrollStep;
+                iterations++;
+                
+                // Stop if we've scrolled past the end
+                if (scrollPos > chatScroll.scrollHeight) break;
+            }
+            
+            // Restore scroll position
+            if (doFullScroll) {
+                chatScroll.scrollTop = originalScroll;
+            }
+            
+            // Check if agent is currently streaming (restrict to chat area to avoid sidebar false positives)
+            const isStreaming = !!wrapper.querySelector('[class*="progress_activity"], [class*="animate-spin"], [class*="animate-pulse"]');
+            
+            return {
+                messages,
+                isFull: doFullScroll,
+                isStreaming,
+                scrollInfo: {
+                    scrollTop: chatScroll.scrollTop,
+                    scrollHeight: chatScroll.scrollHeight,
+                    clientHeight: chatScroll.clientHeight,
+                },
+            };
+        } catch(e) { return { error: e.toString() }; }
+    })()`;
     for (const ctx of cdp.contexts) {
         try {
             const result = await cdp.call("Runtime.evaluate", {
@@ -197,6 +154,78 @@ export async function captureSnapshot(cdp) {
         } catch (e) {}
     }
     return null;
+}
+
+/**
+ * Get available models by reading the model dropdown in Agent Manager
+ */
+export async function getAvailableModels(cdp) {
+    if (!cdp) return [];
+    const EXP = `(async () => {
+        try {
+            // Find model button (contains model name like "Claude", "Gemini", "GPT")
+            const inputBox = document.getElementById('antigravity.agentSidePanelInputBox');
+            if (!inputBox) return { models: [] };
+            
+            const parent = inputBox.parentElement?.parentElement?.parentElement;
+            if (!parent) return { models: [] };
+            
+            const KNOWN = ["Claude", "Gemini", "GPT"];
+            const modelBtns = Array.from(parent.querySelectorAll('button'))
+                .filter(b => KNOWN.some(k => (b.innerText || '').includes(k)));
+            
+            if (modelBtns.length === 0) return { models: [] };
+            
+            const modelBtn = modelBtns[0];
+            modelBtn.click();
+            await new Promise(r => setTimeout(r, 600));
+            
+            // Find the opened dropdown/dialog
+            let models = [];
+            const allDivs = Array.from(document.querySelectorAll('div'))
+                .filter(d => d.offsetHeight > 50 && d.offsetWidth > 100);
+            
+            // Look for the popover/menu that appeared AFTER clicking
+            for (const div of allDivs) {
+                const style = window.getComputedStyle(div);
+                if (style.position === 'fixed' || style.position === 'absolute') {
+                    const items = Array.from(div.querySelectorAll('*'))
+                        .filter(el => {
+                            const txt = (el.innerText || '').trim();
+                            return el.children.length === 0 && txt.length > 3 && txt.length < 60 &&
+                                   KNOWN.some(k => txt.includes(k));
+                        })
+                        .map(el => el.innerText.trim());
+                    if (items.length > 0) {
+                        models = [...new Set(items)];
+                        break;
+                    }
+                }
+            }
+            
+            // Close by pressing Escape
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            // Also try clicking elsewhere
+            document.body.click();
+            await new Promise(r => setTimeout(r, 200));
+            
+            return { models };
+        } catch(e) { return { models: [], error: e.toString() }; }
+    })()`;
+
+    for (const ctx of cdp.contexts) {
+        try {
+            const res = await cdp.call("Runtime.evaluate", {
+                expression: EXP,
+                returnByValue: true,
+                awaitPromise: true,
+                contextId: ctx.id
+            });
+            if (res.result?.value?.models?.length > 0) return res.result.value.models;
+        } catch (e) {}
+    }
+    return [];
 }
 
 /**
@@ -293,38 +322,36 @@ export async function stopGeneration(cdp) {
 /**
  * Sync scroll position to desktop
  */
-export async function remoteScroll(cdp, scrollTop, scrollPercent) {
+export async function remoteScroll(cdp, deltaY) {
     if (!cdp) return { error: 'Not connected' };
-    const EXPRESSION = `(async () => {
+    
+    const EXP = `(async () => {
         try {
-            const scrollables = [...document.querySelectorAll('#conversation [class*="scroll"], #chat [class*="scroll"], #cascade [class*="scroll"], #conversation [style*="overflow"], #chat [style*="overflow"], #cascade [style*="overflow"]')]
-                .filter(el => el.scrollHeight > el.clientHeight);
-            const chatArea = document.querySelector('#conversation .overflow-y-auto, #chat .overflow-y-auto, #cascade .overflow-y-auto, #conversation [data-scroll-area], #chat [data-scroll-area], #cascade [data-scroll-area]');
-            if (chatArea) scrollables.unshift(chatArea);
-            if (scrollables.length === 0) {
-                const cascade = document.getElementById('conversation') || document.getElementById('chat') || document.getElementById('cascade');
-                if (cascade && cascade.scrollHeight > cascade.clientHeight) scrollables.push(cascade);
-            }
-            if (scrollables.length === 0) return { error: 'No scrollable element' };
-            const target = scrollables[0];
-            if (${scrollPercent} !== undefined) {
-                target.scrollTop = (target.scrollHeight - target.clientHeight) * ${scrollPercent};
-            } else {
-                target.scrollTop = ${scrollTop || 0};
-            }
-            return { success: true, scrolled: target.scrollTop };
+            const chatScroll = Array.from(document.querySelectorAll('[class*="scrollbar-hide"][class*="overflow-y"]'))
+                .filter(el => el.scrollHeight > 100 && el.offsetWidth > 200)
+                .sort((a,b) => b.scrollHeight - a.scrollHeight)[0];
+                
+            if (!chatScroll) return { error: 'No scroll container found' };
+            
+            chatScroll.scrollBy({ top: ${deltaY}, behavior: 'smooth' });
+            
+            return { 
+                success: true, 
+                scrollTop: chatScroll.scrollTop, 
+                scrollHeight: chatScroll.scrollHeight 
+            };
         } catch(e) { return { error: e.toString() }; }
     })()`;
 
     for (const ctx of cdp.contexts) {
         try {
             const res = await cdp.call("Runtime.evaluate", {
-                expression: EXPRESSION,
+                expression: EXP,
                 returnByValue: true,
                 awaitPromise: true,
                 contextId: ctx.id
             });
-            if (res.result?.value?.success) return res.result.value;
+            if (res.result?.value) return res.result.value;
         } catch (e) {}
     }
     return { error: 'Scroll failed' };
@@ -671,40 +698,52 @@ export async function listProjects(cdp) {
     const EXP = `(async () => {
         try {
             const projects = [];
-            // The sidebar contains workspace sections with class 'flex flex-col gap-1.5'
-            // Each workspace has a header with the workspace name and a list of conversations
-            // Look for elements that have 'keyboard_arrow_down' as a sibling (workspace toggle)
-            const allButtons = Array.from(document.querySelectorAll('button'));
             
-            // Find workspace header buttons (they contain the workspace name + arrow icon)
-            const wsHeaders = allButtons.filter(b => {
-                const text = b.innerText || '';
-                return text.includes('keyboard_arrow_down') || text.includes('keyboard_arrow_right');
-            });
+            // Find the "+" button next to "Workspace"
+            // Strategy: Find all buttons, check if they either contain 'add' or 'plus' 
+            // AND are near the text 'Workspace', or just find the 'Workspace' header and navigate to the '+' button
+            const allSpans = Array.from(document.querySelectorAll('span'));
+            const workspaceSpan = allSpans.find(s => s.innerText?.trim() === 'Workspaces' || s.innerText?.trim() === 'Workspace');
             
-            // If no headers found, try finding workspace names from the sidebar sections
-            if (wsHeaders.length === 0) {
-                // Alternative: look for sidebar sections with workspace names
-                const sidebarItems = Array.from(document.querySelectorAll('[class*="flex"][class*="gap"]'))
-                    .filter(el => el.offsetWidth < 300 && el.offsetWidth > 100 && el.offsetHeight > 50);
+            let wsBtn = null;
+            if (workspaceSpan) {
+                // The '+' button is usually a sibling or close parent's child
+                // Traverse up slightly and find a button containing 'add' or a plus icon
+                const container = workspaceSpan.closest('div.flex');
+                if (container) {
+                    wsBtn = container.querySelector('button');
+                }
+            }
+            
+            // Fallback: click the first button containing 'add' icon in the sidebar
+            if (!wsBtn) {
+                wsBtn = Array.from(document.querySelectorAll('button')).find(b => (b.innerText || '').includes('add'));
+            }
+            
+            if (wsBtn) {
+                // Click to open the dropdown/modal
+                wsBtn.click();
+                await new Promise(r => setTimeout(r, 600));
                 
-                sidebarItems.forEach((item, index) => {
-                    const text = item.innerText?.trim();
-                    if (text && text.length < 100 && !text.includes('Start new') && !text.includes('Chat History')) {
-                        const name = text.split('\\n')[0]?.trim();
-                        if (name && name.length > 1 && name.length < 50) {
-                            projects.push({ index, name, path: '' });
+                // Read from modal. The modal usually creates a floating portal or a list at the end of body
+                const menuItems = document.querySelectorAll('div.px-2\\\\.5.cursor-pointer, [role="menuitem"], .monaco-list-row');
+                if (menuItems.length > 0) {
+                    menuItems.forEach((item, index) => {
+                        const nameSpan = item.querySelector('span.text-sm > span') || item.querySelector('.monaco-highlighted-label') || item;
+                        let name = (nameSpan.innerText || '').trim();
+                        // Ignore UI control text
+                        if (name && name !== 'Open Workspace' && !name.includes('keyboard_arrow') && name.length > 1) {
+                            // Ensure unique
+                            if (!projects.some(p => p.name === name)) {
+                                projects.push({ name, path: 'Workspace ' + (index + 1), index });
+                            }
                         }
-                    }
-                });
-            } else {
-                wsHeaders.forEach((header, index) => {
-                    const text = header.innerText || '';
-                    const name = text.replace(/keyboard_arrow_(down|right)/g, '').replace(/more_vert/g, '').trim();
-                    if (name && name.length > 0) {
-                        projects.push({ index, name, path: '' });
-                    }
-                });
+                    });
+                }
+                
+                // Click document body or Esc to close modal
+                document.body.click();
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
             }
             
             return { success: true, projects };
@@ -735,15 +774,34 @@ export async function openProject(cdp, { index, name }) {
         try {
             const targetName = ${JSON.stringify(name || '')};
             const targetIndex = ${JSON.stringify(index !== undefined ? index : -1)};
-            const items = document.querySelectorAll('div.px-2\\\\.5.cursor-pointer');
+            
+            // First open the workspace dropdown
+            const allSpans = Array.from(document.querySelectorAll('span'));
+            const workspaceSpan = allSpans.find(s => s.innerText?.trim() === 'Workspaces' || s.innerText?.trim() === 'Workspace');
+            
+            let wsBtn = null;
+            if (workspaceSpan) {
+                const container = workspaceSpan.closest('div.flex');
+                if (container) wsBtn = container.querySelector('button');
+            }
+            if (!wsBtn) wsBtn = Array.from(document.querySelectorAll('button')).find(b => (b.innerText || '').includes('add'));
+            
+            if (wsBtn) {
+                wsBtn.click();
+                await new Promise(r => setTimeout(r, 600));
+            } else {
+                return { error: 'Workspace "+" button not found' };
+            }
+            
+            const items = document.querySelectorAll('div.px-2\\\\.5.cursor-pointer, [role="menuitem"], .monaco-list-row');
             let targetEl = null;
 
             if (targetIndex >= 0 && targetIndex < items.length) {
                 targetEl = items[targetIndex];
             } else if (targetName) {
                 for (const item of items) {
-                    const nameSpan = item.querySelector('span.text-sm > span');
-                    if (nameSpan && nameSpan.innerText.trim() === targetName) {
+                    const nameSpan = item.querySelector('span.text-sm > span') || item.querySelector('.monaco-highlighted-label') || item;
+                    if ((nameSpan.innerText || '').trim() === targetName) {
                         targetEl = item; break;
                     }
                 }
@@ -752,6 +810,9 @@ export async function openProject(cdp, { index, name }) {
                 targetEl.click();
                 return { success: true };
             }
+            
+            // Close dropdown if ignored
+            document.body.click();
             return { error: 'Project not found' };
         } catch (err) { return { error: err.toString() }; }
     })()`;
@@ -824,3 +885,4 @@ export async function selectChat(cdp, chatTitle) {
     }
     return { error: 'Context failed' };
 }
+

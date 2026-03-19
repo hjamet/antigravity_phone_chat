@@ -1,5 +1,6 @@
 /**
  * UI Manipulation and Snapshot Rendering
+ * Phase 2: Native chat rendering (no iframe)
  */
 
 export const elements = {
@@ -19,108 +20,143 @@ export const elements = {
     sslBanner: document.getElementById('sslBanner'),
     historyLayer: document.getElementById('historyLayer'),
     projectsLayer: document.getElementById('projectsLayer'),
-    statsText: document.getElementById('statsText'),
-    currentProjectName: document.getElementById('currentProjectName'),
-    currentProjectStatus: document.getElementById('currentProjectStatus'),
 };
 
+// State for tracking current messages to avoid full re-renders
+let lastMessageCount = 0;
+
 /**
- * Render a chat snapshot into the UI
+ * Render chat messages natively (no iframe)
  */
 export function renderSnapshot(data) {
-    if (!data || !data.html) return;
-
-    // Use or create the iframe
-    let frame = document.getElementById('snapshot-frame');
-    if (!frame) {
-        frame = document.createElement('iframe');
-        frame.id = 'snapshot-frame';
-        frame.style.width = '100%';
-        frame.style.height = '100%';
-        frame.style.border = 'none';
-        frame.style.minHeight = '0'; // Allow flex to control size
-        frame.style.flexGrow = '1';
-        elements.chatContent.innerHTML = '';
-        elements.chatContent.style.display = 'flex';
-        elements.chatContent.style.flexDirection = 'column';
-        elements.chatContent.appendChild(frame);
+    if (!data) return;
+    
+    // Support new JSON format (messages array) 
+    const messages = data.messages;
+    if (!messages || !Array.isArray(messages)) {
+        // Fallback: if we got old-format data with html field, show raw text
+        if (data.html) {
+            showFallbackHtml(data);
+        }
+        return;
     }
 
-    const doc = frame.contentDocument || frame.contentWindow.document;
+    const container = elements.chatContent;
+    if (!container) return;
     
-    // Determine colors from snapshot data or defaults
-    const bgColor = data.backgroundColor || '#1e1e2e';
-    const textColor = data.color || '#cdd6f4';
-    const fontFamily = data.fontFamily || 'system-ui, -apple-system, sans-serif';
-
-    // Always re-create document to avoid stale state
-    doc.open();
-    doc.write(`<!DOCTYPE html>
-<html>
-<head>
-<style id="injected-css">
-/* Override VSCode CSS variables that won't resolve in iframe */
-:root, body {
-    --vscode-foreground: ${textColor};
-    --vscode-editor-background: ${bgColor};
-    --vscode-editor-foreground: ${textColor};
-    --vscode-textLink-foreground: #89b4fa;
-    --vscode-textBlockQuote-background: rgba(255,255,255,0.05);
-    --vscode-textBlockQuote-border: rgba(255,255,255,0.1);
-    --foreground: ${textColor};
-    --fgColor-default: ${textColor};
-    --bgColor-default: ${bgColor};
-    color-scheme: dark;
-}
-body {
-    margin: 0;
-    padding: 12px 16px;
-    background-color: ${bgColor};
-    color: ${textColor};
-    font-family: ${fontFamily};
-    font-size: 14px;
-    line-height: 1.6;
-    overflow-x: hidden;
-}
-/* Make all text visible */
-* { color: inherit; }
-a { color: #89b4fa; }
-code, pre {
-    background: rgba(255,255,255,0.06);
-    border-radius: 4px;
-    padding: 2px 4px;
-    font-family: 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 13px;
-}
-pre { padding: 12px; overflow-x: auto; }
-pre code { padding: 0; background: transparent; }
-img { max-width: 100%; border-radius: 8px; }
-/* Hide scrollbars for cleaner look */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
-</style>
-<style id="snapshot-css"></style>
-</head>
-<body><div id="root"></div></body>
-</html>`);
-    doc.close();
-
-    const root = doc.getElementById('root');
-    const snapshotCss = doc.getElementById('snapshot-css');
-
-    // Inject snapshot CSS (from Manager)
-    if (data.css) snapshotCss.textContent = data.css;
-
-    // Inject HTML content
-    root.innerHTML = data.html;
-
-    // Apply background to outer container too
-    if (elements.chatContainer) {
-        elements.chatContainer.style.backgroundColor = bgColor;
+    // Only do a full re-render if the message count changed
+    if (messages.length !== lastMessageCount) {
+        container.innerHTML = '';
+        lastMessageCount = messages.length;
+        
+        messages.forEach((msg, idx) => {
+            const bubble = createMessageBubble(msg, idx);
+            container.appendChild(bubble);
+        });
+    } else {
+        // Update the last message (might be streaming)
+        const lastBubble = container.lastElementChild;
+        const lastMsg = messages[messages.length - 1];
+        if (lastBubble && lastMsg) {
+            const contentEl = lastBubble.querySelector('.msg-content');
+            if (contentEl) {
+                contentEl.innerHTML = formatContent(lastMsg);
+            }
+        }
     }
     
-    return frame;
+    // Show streaming indicator
+    updateStreamingIndicator(data.isStreaming);
+    
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight;
+    
+    return container;
+}
+
+/**
+ * Create a single chat message bubble
+ */
+function createMessageBubble(msg, index) {
+    const div = document.createElement('div');
+    div.className = `chat-bubble ${msg.role}`;
+    div.dataset.index = index;
+    
+    // Role indicator
+    const roleLabel = document.createElement('div');
+    roleLabel.className = 'msg-role';
+    roleLabel.textContent = msg.role === 'user' ? '👤 You' : '🤖 Agent';
+    
+    // Content 
+    const content = document.createElement('div');
+    content.className = 'msg-content';
+    content.innerHTML = formatContent(msg);
+    
+    div.appendChild(roleLabel);
+    div.appendChild(content);
+    
+    return div;
+}
+
+/**
+ * Format message content for display
+ */
+function formatContent(msg) {
+    // For agent messages, if we have pre-rendered HTML from the DOM, use it
+    // But we need to sanitize it (remove VSCode-specific stuff)
+    if (msg.role === 'agent' && msg.html) {
+        // Clean the HTML: remove VSCode CSS vars, fix colors
+        let html = msg.html;
+        // Remove empty skeleton divs
+        html = html.replace(/<div[^>]*class="[^"]*bg-gray-500\/10[^"]*"[^>]*style="height:\s*[\d.]+px[^"]*"[^>]*><\/div>/g, '');
+        // Remove zero-height divs
+        html = html.replace(/<div[^>]*style="height:\s*0px[^"]*"[^>]*>[\s\S]*?<\/div>/g, '');
+        return html;
+    }
+    
+    // For user messages or messages without HTML, format the plain text
+    const text = msg.content || '';
+    // Basic markdown-to-HTML for plain text
+    return escapeHtml(text)
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+
+/**
+ * Escape HTML special characters
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
+ * Show/hide streaming indicator
+ */
+function updateStreamingIndicator(isStreaming) {
+    let indicator = document.getElementById('streamingIndicator');
+    if (isStreaming) {
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'streamingIndicator';
+            indicator.className = 'streaming-indicator';
+            indicator.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+            elements.chatContent?.appendChild(indicator);
+        }
+    } else {
+        indicator?.remove();
+    }
+}
+
+/**
+ * Fallback for old HTML format
+ */
+function showFallbackHtml(data) {
+    const container = elements.chatContent;
+    if (!container) return;
+    container.innerHTML = `<div style="padding: 16px; color: #cdd6f4;">${data.html}</div>`;
 }
 
 /**
@@ -135,17 +171,12 @@ export function updateStateUI(state) {
     if (elements.modelText && state.model) {
         elements.modelText.textContent = state.model;
     }
-    // Update status indicators  
-    if (elements.statsText) {
-        elements.statsText.textContent = state.mode && state.model 
-            ? `${state.mode} · ${state.model}` 
-            : 'Connected';
+    // Update status dot & text
+    if (elements.statusDot) {
+        elements.statusDot.className = 'status-dot connected';
     }
-    if (elements.currentProjectStatus) {
-        elements.currentProjectStatus.textContent = state.workspace || 'Connected';
-    }
-    if (elements.currentProjectName && state.workspace) {
-        elements.currentProjectName.textContent = state.workspace;
+    if (elements.statusText) {
+        elements.statusText.textContent = state.workspace || 'Connected';
     }
 }
 

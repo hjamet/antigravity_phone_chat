@@ -170,6 +170,15 @@ async function initCDP() {
     if (targets.manager && !cdpConnections.manager) {
         cdpConnections.manager = await connectCDP(targets.manager.url);
         console.log(`✅ Connected to Agent Manager on port ${targets.manager.port}`);
+        
+        // Background initial capture
+        setTimeout(async () => {
+            const snap = await managerCdp.captureSnapshot(cdpConnections.manager, { fullScroll: false });
+            if (snap && !snap.error) {
+                lastSnapshot.data = snap;
+                lastSnapshotHash = hashString(JSON.stringify(snap.messages) + (snap.isStreaming ? '1' : '0'));
+            }
+        }, 1000);
     }
 }
 
@@ -188,16 +197,20 @@ async function startPolling(wss) {
         if (cdpConnections.manager) {
             try {
                 console.log('📸 Attempting to capture snapshot from Manager...');
-                const snapshot = await managerCdp.captureSnapshot(cdpConnections.manager);
+                // Background poll extracts ONLY the visible DOM elements (no scroll = no jumping)
+                const snapshot = await managerCdp.captureSnapshot(cdpConnections.manager, { fullScroll: false });
+                
                 if (snapshot && !snapshot.error) {
-                    const hash = hashString(snapshot.html);
+                    // No history merging anymore. The Phone UI is just a mirror of the Agent Manager viewport.
+                    lastSnapshot.data = snapshot;
+                    
+                    const hash = hashString(JSON.stringify(lastSnapshot.data.messages) + (lastSnapshot.data.isStreaming ? '1' : '0'));
                     if (hash !== lastSnapshotHash) {
-                        lastSnapshot.data = snapshot;
                         lastSnapshotHash = hash;
                         wss.broadcastUpdate?.(hash);
                         console.log(`📸 Snapshot updated(hash: ${hash})`);
                     } else {
-                        console.log('📸 Snapshot hash unchanged.');
+                        // console.log('📸 Snapshot hash unchanged.');
                     }
                 } else {
                     console.warn('⚠️ Snapshot capture returned error or null:', snapshot?.error || 'null');

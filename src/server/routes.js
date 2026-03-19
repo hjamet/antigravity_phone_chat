@@ -145,6 +145,42 @@ export function setupRoutes(app, {
         res.json(result || { mode: 'Unknown', model: 'Unknown' });
     });
 
+    router.get('/available-models', async (req, res) => {
+        const models = await managerCdp.getAvailableModels(cdpConnections.manager);
+        res.json({ models });
+    });
+
+    router.get('/force-snapshot', async (req, res) => {
+        try {
+            const snapshot = await managerCdp.captureSnapshot(cdpConnections.manager, { fullScroll: false });
+            if (snapshot && !snapshot.error) {
+                lastSnapshot.data = snapshot;
+                return res.json(snapshot);
+            }
+            return res.status(503).json({ error: snapshot?.error || 'Snapshot failed' });
+        } catch(e) {
+            return res.status(500).json({ error: e.message });
+        }
+    });
+
+    router.post('/remote-scroll', async (req, res) => {
+        try {
+            const { deltaY } = req.body;
+            if (!deltaY) return res.status(400).json({ error: 'Missing deltaY' });
+            const result = await managerCdp.remoteScroll(cdpConnections.manager, deltaY);
+            if (result && result.success) {
+                // Instantly update snapshot right after scrolling
+                const snapshot = await managerCdp.captureSnapshot(cdpConnections.manager, { fullScroll: false });
+                if (snapshot && !snapshot.error) {
+                    lastSnapshot.data = snapshot;
+                }
+            }
+            res.json(result);
+        } catch(e) {
+            return res.status(500).json({ error: e.message });
+        }
+    });
+
     router.post('/new-chat', async (req, res) => {
         const result = await managerCdp.startNewChat(cdpConnections.manager);
         res.json(result);

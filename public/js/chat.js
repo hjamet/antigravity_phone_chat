@@ -16,10 +16,10 @@ export async function sendMessage(text) {
     elements.chatInput.style.height = 'auto';
 
     try {
-        const res = await fetchWithAuth('/inject', {
+        const res = await fetchWithAuth('/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: text.trim() })
+            body: JSON.stringify({ message: text.trim() })
         });
         const data = await res.json();
         if (data.error) {

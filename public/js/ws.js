@@ -28,10 +28,22 @@ export function initWS(onMessage) {
         if (pollInterval) clearInterval(pollInterval);
     };
 
-    socket.onmessage = (event) => {
+    socket.onmessage = async (event) => {
         try {
-            const data = JSON.parse(event.data);
-            callbacks.forEach(cb => cb(data));
+            const message = JSON.parse(event.data);
+            
+            if (message.type === 'snapshot_update') {
+                // Fetch the actual snapshot data when notified of an update
+                const t = Date.now();
+                const res = await fetchWithAuth(`/snapshot?t=${t}`);
+                const data = await res.json();
+                if (data && !data.error) {
+                    callbacks.forEach(cb => cb({ type: 'snapshot', data }));
+                }
+            } else {
+                // Pass through other message types (like 'snapshot' or 'state')
+                callbacks.forEach(cb => cb(message));
+            }
         } catch (e) {
             console.error('WS Message Parse Error:', e);
         }
@@ -59,7 +71,8 @@ function startPolling() {
     pollInterval = setInterval(async () => {
         if (isConnected) return;
         try {
-            const res = await fetchWithAuth('/snapshot');
+            const t = Date.now();
+            const res = await fetchWithAuth(`/snapshot?t=${t}`);
             const data = await res.json();
             if (data && !data.error) {
                 callbacks.forEach(cb => cb({ type: 'snapshot', data }));

@@ -9,13 +9,14 @@
 export async function captureSnapshot(cdp) {
     if (!cdp) return null;
     const CAPTURE_SCRIPT = `(async () => {
-        const cascade = document.getElementById('conversation') || document.getElementById('chat') || document.getElementById('cascade');
-        if (!cascade) {
-            // Debug info
-            const body = document.body;
-            const childIds = Array.from(body.children).map(c => c.id).filter(id => id).join(', ');
-            return { error: 'chat container not found', debug: { hasBody: !!body, availableIds: childIds } };
-        }
+        const cascade = document.getElementById('conversation') || 
+                        document.querySelector('#conversation > div.relative.flex.flex-col') ||
+                        document.querySelector('[data-testid="chat-container"]') ||
+                        document.querySelector('.flex.flex-col.overflow-y-auto.grow') ||
+                        document.querySelector('#antigravity.agentSidePanelInputBox')?.closest('.flex.flex-col') ||
+                        document.body; 
+
+        if (!cascade) return { error: 'No suitable container found even after body fallback' };
         
         const cascadeStyles = window.getComputedStyle(cascade);
         

@@ -130,7 +130,20 @@ async function connectCDP(url) {
     });
 
     await call("Runtime.enable", {});
-    return { ws, call, contexts };
+    
+    const contextsProxy = new Proxy(contexts, {
+        get(target, prop) {
+            if (prop === Symbol.iterator) {
+                return function* () {
+                    if (target.length === 0) yield { id: undefined };
+                    else yield* target;
+                };
+            }
+            return target[prop];
+        }
+    });
+
+    return { ws, call, contexts: contextsProxy };
 }
 
 // --- Initialization & Polling ---
@@ -174,6 +187,7 @@ async function startPolling(wss) {
 
         if (cdpConnections.manager) {
             try {
+                console.log('📸 Attempting to capture snapshot from Manager...');
                 const snapshot = await managerCdp.captureSnapshot(cdpConnections.manager);
                 if (snapshot && !snapshot.error) {
                     const hash = hashString(snapshot.html);
@@ -182,10 +196,14 @@ async function startPolling(wss) {
                         lastSnapshotHash = hash;
                         wss.broadcastUpdate?.(hash);
                         console.log(`📸 Snapshot updated(hash: ${hash})`);
+                    } else {
+                        console.log('📸 Snapshot hash unchanged.');
                     }
+                } else {
+                    console.warn('⚠️ Snapshot capture returned error or null:', snapshot?.error || 'null');
                 }
             } catch (e) {
-                console.error('Poll error:', e.message);
+                console.error('❌ Poll error:', e.message);
             }
         }
         setTimeout(poll, POLL_INTERVAL);

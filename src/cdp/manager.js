@@ -86,7 +86,10 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                                         const isBareFilename = /^[a-zA-Z0-9_\\\\-]+\\.(js|ts|md|json|py|css|html)(#L\\d+.*)?$/.test(tr);
                                         const isSingleWord = tr.split(' ').length <= 2 && tr.length < 30;
                                         const isPath = tr.includes('\\\\') && !tr.includes(' ');
-                                        if (!isNoise && !isBareFilename && !isSingleWord && !isPath && !/^\\{.*\\}$/.test(tr)) {
+                                        const isSentence = tr.includes('. ') || tr.endsWith('.') || tr.endsWith(':') || tr.endsWith('!') || tr.endsWith('?');
+                                        const isTooLong = tr.length > 90 || tr.split(' ').length >= 12;
+                                        
+                                        if (!isNoise && !isBareFilename && !isSingleWord && !isPath && !isSentence && !isTooLong && !/^\\{.*\\}$/.test(tr)) {
                                             pts.push(tr);
                                         }
                                     }
@@ -121,8 +124,17 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                                     if (tt2.length < 5 || tt2.length > 150) tt2 = '';
                                 }
                                 
-                                mp = text;
-                                mh = cl.innerHTML || '';
+                                // Strict noise filter for paragraphs (agent thoughts)
+                                const isThought = text.length > 400 || 
+                                                  text.includes("CRITICAL INSTRUCTION") || 
+                                                  text.includes("Tools: I need to") || 
+                                                  text.includes("Let's look at") ||
+                                                  text.includes("Wait, if");
+                                                  
+                                if (!isThought) {
+                                    mp = text;
+                                    mh = cl.innerHTML || '';
+                                }
                                 
                                 cl.remove();
                             }

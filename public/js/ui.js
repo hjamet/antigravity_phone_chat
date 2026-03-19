@@ -1,6 +1,6 @@
 /**
- * UI Manipulation and Snapshot Rendering
- * Phase 3: Simplified last-message rendering
+ * UI Manipulation and Chat State Rendering
+ * Phase 5: Renders from /api/chat-state controller endpoint
  */
 
 export const elements = {
@@ -22,169 +22,124 @@ export const elements = {
     projectsLayer: document.getElementById('projectsLayer'),
 };
 
-// State for tracking current messages to avoid full re-renders
+// State tracking
 let lastRenderedHash = '';
 
 /**
- * Render chat messages natively (no iframe)
- * Shows structured messages: user, mainParagraph (prominent), progressTitles (compact), directMessage
+ * Render chat state from /api/chat-state response
+ * Uses incremental DOM updates to avoid flicker
  */
-export function renderSnapshot(data) {
-    if (!data) return;
-    
-    const messages = data.messages;
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-        if (data.html) {
-            showFallbackHtml(data);
-        }
-        return;
-    }
-
-    // Get user message from localStorage (source of truth) or snapshot
-    const savedUserMsg = localStorage.getItem('lastUserMessage') || '';
-
-    // displayMsgs represents the unified timeline sent by server
-    const displayMsgs = [...messages];
-    
-    // Fallback: if no user in list but we have one in localStorage, add it
-    if (!displayMsgs.some(m => m.role === 'user') && savedUserMsg) {
-        displayMsgs.unshift({ role: 'user', type: 'message', content: savedUserMsg });
-    }
-
-    // Build a hash to detect changes
-    const hash = displayMsgs.map(m => (m.type || '') + ':' + (m.content?.substring(0, 30) || (m.steps ? JSON.stringify(m.steps).substring(0, 30) : '') )).join('|');
+export function renderChatState(state) {
+    if (!state) return;
     
     const container = elements.chatContent;
     if (!container) return;
     
-    // Only re-render if content changed
-    if (hash !== lastRenderedHash) {
-        lastRenderedHash = hash;
-        container.innerHTML = '';
+    const messages = state.messages || [];
+    
+    // Build hash for change detection
+    const hash = messages.map(m => `${m.type}:${m.role}:${(m.content||'').substring(0,40)}:${(m.title||'')}:${m.subtitles?.length||0}`).join('|') + (state.isStreaming ? ':S' : ':X');
+    
+    if (hash === lastRenderedHash) return;
+    lastRenderedHash = hash;
+    
+    // Check if user is near the bottom before update
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+    
+    // Remove initial loading state on first render
+    container.querySelectorAll('.loading-state').forEach(el => el.remove());
+    
+    // Get existing message divs (exclude streaming indicator)
+    const existing = Array.from(container.querySelectorAll('.chat-msg'));
+    
+    // Update or create each message
+    for (let i = 0; i < messages.length; i++) {
+        const msg = messages[i];
+        const msgHash = getMessageHash(msg);
         
-        for (const msg of displayMsgs) {
-            container.appendChild(createMessageBubble(msg));
+        if (i < existing.length) {
+            if (existing[i].getAttribute('data-hash') !== msgHash) {
+                // Update existing element in-place to avoid triggering CSS animations
+                const temp = document.createElement('div');
+                temp.innerHTML = buildMessageHtml(msg);
+                const newEl = temp.firstElementChild;
+                
+                existing[i].innerHTML = newEl.innerHTML;
+                existing[i].className = newEl.className;
+                existing[i].setAttribute('data-hash', msgHash);
+            }
+        } else {
+            // Append new element
+            const temp = document.createElement('div');
+            temp.innerHTML = buildMessageHtml(msg);
+            const newEl = temp.firstElementChild;
+            newEl.setAttribute('data-hash', msgHash);
+            container.appendChild(newEl);
         }
     }
     
-    // Show streaming indicator
-    updateStreamingIndicator(data.isStreaming);
-    
-    // Scroll to bottom
-    container.scrollTop = container.scrollHeight;
+    // Remove extra old elements
+    const currentMsgs = container.querySelectorAll('.chat-msg');
+    for (let i = messages.length; i < currentMsgs.length; i++) {
+        currentMsgs[i].remove();
+    }
+
+    // Streaming indicator
+    updateStreamingIndicator(state.isStreaming);
+
+    // Only auto-scroll if user was near the bottom
+    if (isNearBottom) {
+        container.scrollTop = container.scrollHeight;
+    }
     
     return container;
 }
 
 /**
- * Create a chat message bubble based on type
+ * Generate a simple hash from message contents
  */
-function createMessageBubble(msg) {
-    const div = document.createElement('div');
-    const role = msg.role;
-    const type = msg.type || 'message';
-    
-    if (role === 'user') {
-        div.className = 'chat-bubble user';
-        const roleLabel = document.createElement('div');
-        roleLabel.className = 'msg-role';
-        roleLabel.textContent = '👤 You';
-        const content = document.createElement('div');
-        content.className = 'msg-content';
-        content.innerHTML = formatContent(msg);
-        div.appendChild(roleLabel);
-        div.appendChild(content);
-    } else if (type === 'taskBlock') {
-        // Hierarchical task display showing the current summary and accumulated steps
-        div.className = 'chat-bubble agent main-paragraph';
-        
-        let contentHtml = '';
-        
-        // 1. Show the main task title
-        if (msg.taskTitle) {
-            contentHtml += `<h3 class="group-task-title" style="margin-top: 5px; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; font-size: 1.1em;">🎯 ${msg.taskTitle}</h3>`;
-        }
-        
-        // 2. Render the top-level current task summary (which replaces old ones)
-        if (msg.taskSummary) {
-            contentHtml += `<div class="msg-content task-step-summary" style="margin-bottom: 12px;">${formatContent({ content: msg.taskSummary })}</div>`;
-        }
-        
-        // 3. Render the list of accumulated TaskStatus steps below the summary
-        if (msg.allStatuses && msg.allStatuses.length > 0) {
-            msg.allStatuses.forEach((status, idx) => {
-                if (status) {
-                    contentHtml += `<div class="task-step-title" style="font-weight: 600; margin-bottom: 4px; margin-top: 8px; color: var(--accent-light); font-size: 0.95em;">## ${idx + 1}. ${status}</div>`;
-                }
-            });
-        }
-        
-        div.innerHTML = contentHtml;
-    } else if (type === 'progressTitles') {
-        // Compact progress titles
-        div.className = 'chat-bubble agent progress-titles';
-        if (msg.taskTitle) {
-            const taskLabel = document.createElement('div');
-            taskLabel.className = 'msg-task-title compact';
-            taskLabel.textContent = '⚙️ ' + msg.taskTitle;
-            div.appendChild(taskLabel);
-        }
-        const list = document.createElement('ul');
-        list.className = 'progress-list';
-        const titles = msg.titles || msg.content.split('\n');
-        for (const t of titles.slice(-5)) { // Only show last 5
-            const li = document.createElement('li');
-            li.textContent = t;
-            list.appendChild(li);
-        }
-        div.appendChild(list);
-    } else {
-        // Direct message or generic
-        div.className = 'chat-bubble agent';
-        const roleLabel = document.createElement('div');
-        roleLabel.className = 'msg-role';
-        roleLabel.textContent = '🤖 Agent';
-        const content = document.createElement('div');
-        content.className = 'msg-content';
-        content.innerHTML = formatContent(msg);
-        div.appendChild(roleLabel);
-        div.appendChild(content);
+function getMessageHash(msg) {
+    const s = `${msg.type}:${msg.role}:${(msg.content||'').substring(0,60)}:${(msg.title||'')}:${msg.subtitles?.length||0}`;
+    let hash = 0;
+    for (let i = 0; i < s.length; i++) {
+        hash = Math.imul(31, hash) + s.charCodeAt(i) | 0;
     }
-    
-    return div;
+    return hash.toString();
 }
 
 /**
- * Format message content for display
+ * Build HTML string for a message (no DOM creation, just string)
  */
-function formatContent(msg) {
-    if (msg.role === 'agent' && msg.html) {
-        let html = msg.html;
-        // Remove skeleton placeholder divs (virtualized rows)
-        html = html.replace(/<div[^>]*class="[^"]*rounded-lg bg-gray-500\/10[^"]*"[^>]*style="height:\s*[\d.]+px[^"]*"[^>]*><\/div>/g, '');
-        // Remove empty wrapper divs left behind
-        html = html.replace(/<div><\/div>/g, '');
-        // Remove feedback buttons (copy, thumbs up/down)
-        html = html.replace(/<button[^>]*data-tooltip-id[^>]*>[\s\S]*?<\/button>/g, '');
-        // Remove google-symbols icon spans
-        html = html.replace(/<span[^>]*class="[^"]*google-symbols[^"]*"[^>]*>[\s\S]*?<\/span>/g, '');
-        // Remove text artifacts from icon fallback
-        html = html.replace(/\bcontent_copy\b/g, '');
-        html = html.replace(/\bthumb_up\b/g, '');
-        html = html.replace(/\bthumb_down\b/g, '');
-        // Remove divs with only whitespace
-        html = html.replace(/<div[^>]*>\s*<\/div>/g, '');
-        // Remove style tags (huge injected CSS from Agent Manager)
-        html = html.replace(/<style[\s\S]*?<\/style>/g, '');
+function buildMessageHtml(msg) {
+    if (msg.role === 'user') {
+        return `<div class="chat-msg user-msg"><div class="msg-label">You</div><div class="msg-body">${escapeHtml(msg.content || '')}</div></div>`;
+    } else if (msg.type === 'taskBlock') {
+        let html = '<div class="chat-msg task-msg">';
+        if (msg.title) html += `<div class="task-title">🎯 ${escapeHtml(msg.title)}</div>`;
+        if (msg.content) html += `<div class="task-paragraph">${escapeHtml(msg.content)}</div>`;
+        if (msg.subtitles && msg.subtitles.length > 0) {
+            html += '<div class="task-steps">';
+            msg.subtitles.forEach((s, i) => {
+                if (s) html += `<div class="task-step"><span class="step-num">${i + 1}</span>${escapeHtml(s)}</div>`;
+            });
+            html += '</div>';
+        }
+        html += '</div>';
         return html;
+    } else {
+        return `<div class="chat-msg agent-msg"><div class="msg-label">Agent</div><div class="msg-body">${formatAgentText(msg.content || '')}</div></div>`;
     }
-    
-    // For user messages or messages without HTML, format the plain text
-    const text = msg.content || '';
+}
+
+/**
+ * Format agent text with basic markdown-like rendering
+ */
+function formatAgentText(text) {
     return escapeHtml(text)
         .replace(/\n\n/g, '</p><p>')
         .replace(/\n/g, '<br>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>');
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 }
 
 /**
@@ -215,12 +170,22 @@ function updateStreamingIndicator(isStreaming) {
 }
 
 /**
- * Fallback for old HTML format
+ * LEGACY: renderSnapshot for backward compatibility with WS updates
  */
-function showFallbackHtml(data) {
+export function renderSnapshot(data) {
+    // If it looks like a chat-state response, use the new renderer
+    if (data?.messages && data.messages[0]?.type) {
+        return renderChatState(data);
+    }
+    
+    // Legacy fallback
     const container = elements.chatContent;
-    if (!container) return;
-    container.innerHTML = `<div style="padding: 16px; color: #cdd6f4;">${data.html}</div>`;
+    if (!container || !data) return;
+    
+    if (data.html) {
+        container.innerHTML = `<div style="padding: 16px; color: #cdd6f4;">${data.html}</div>`;
+    }
+    return container;
 }
 
 /**
@@ -235,19 +200,17 @@ export function updateStateUI(state) {
     if (elements.modelText && state.model) {
         elements.modelText.textContent = state.model;
     }
-    // Update status dot & text
     if (elements.statusDot) {
         elements.statusDot.className = 'status-dot connected';
     }
     if (elements.statusText) {
         elements.statusText.textContent = state.workspace || 'Connected';
     }
-    // Update project selector status label (fixes stuck "Connecting...")
+    // Fix stuck "Connecting..." and "Syncing..." labels
     const projectStatus = document.getElementById('currentProjectStatus');
     if (projectStatus) {
         projectStatus.textContent = state.workspace ? 'Connected' : 'Online';
     }
-    // Update stats text (fixes stuck "Syncing...")
     const statsText = document.getElementById('statsText');
     if (statsText) {
         statsText.textContent = state.workspace || 'Ready';

@@ -151,12 +151,24 @@ function getMessageHash(msg) {
 function buildMessageInner(msg) {
     const renderContent = (m) => {
         if (m.html) {
-            return m.html.replace(/<style[\s\S]*?<\/style>/g, '')
-                         .replace(/<button[^>]*data-tooltip-id[^>]*>[\s\S]*?<\/button>/g, '')
-                         .replace(/<span[^>]*class="[^"]*google-symbols[^"]*"[^>]*>[\s\S]*?<\/span>/g, '')
-                         .replace(/\bcontent_copy\b/g, '')
-                         .replace(/\bthumb_up\b/g, '')
-                         .replace(/\bthumb_down\b/g, '');
+            return m.html
+                // Strip all <style> blocks
+                .replace(/<style[\s\S]*?<\/style>/g, '')
+                // Strip code block action bars (copy, mention buttons container)
+                .replace(/<div[^>]*class="[^"]*code-block-actions[^"]*"[^>]*>[\s\S]*?<\/div>/g, '')
+                // Strip all <button> elements (action buttons, tooltips)
+                .replace(/<button[^>]*>[\s\S]*?<\/button>/g, '')
+                // Strip small file extension icon images from Antigravity
+                .replace(/<img[^>]*>/g, '')
+                // Strip Google Material Symbols icon spans
+                .replace(/<span[^>]*class="[^"]*google-symbols[^"]*"[^>]*>[\s\S]*?<\/span>/g, '')
+                // Strip SVG elements (inline icons inside buttons)
+                .replace(/<svg[^>]*>[\s\S]*?<\/svg>/g, '')
+                // Clean leftover icon text keywords
+                .replace(/\bcontent_copy\b/g, '')
+                .replace(/\bthumb_up\b/g, '')
+                .replace(/\bthumb_down\b/g, '')
+                .replace(/\b@\b/g, '');
         }
         return formatMarkdown(m.content);
     };

@@ -118,9 +118,21 @@ export function setupRoutes(app, {
         res.json(result);
     });
 
+    let lastSentMessage = null;
+    let lastSentTime = 0;
+
     router.post('/send', async (req, res) => {
         const { message } = req.body;
         if (!message) return res.status(400).json({ error: 'Message required' });
+        
+        // Anti-spam debounce (2 seconds)
+        if (message === lastSentMessage && Date.now() - lastSentTime < 2000) {
+            console.log(`[Debounce] Ignored duplicate message: "${message.substring(0, 30)}..."`);
+            return res.json({ success: true, method: 'debounced', details: {} });
+        }
+        lastSentMessage = message;
+        lastSentTime = Date.now();
+
         const result = await managerCdp.injectMessage(cdpConnections.manager, message);
         res.json({
             success: result.ok !== false,

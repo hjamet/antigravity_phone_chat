@@ -6,11 +6,12 @@ import { fetchWithAuth } from './api.js';
 import { elements } from './ui.js';
 
 let isSending = false;
-let pendingMessages = [];
 
 window.addEventListener('agent-stopped-streaming', () => {
-    if (pendingMessages.length > 0 && !isSending && !window.isAgentStreaming) {
-        const nextMsg = pendingMessages.shift();
+    const q = JSON.parse(localStorage.getItem('unsentQueue') || '[]');
+    if (q.length > 0 && !isSending && !window.isAgentStreaming) {
+        const nextMsg = q.shift();
+        localStorage.setItem('unsentQueue', JSON.stringify(q));
         sendMessage(nextMsg);
     }
 });
@@ -22,12 +23,16 @@ export async function sendMessage(text) {
     if (!text || !text.trim() || isSending) return;
 
     if (window.isAgentStreaming) {
-        pendingMessages.push(text);
+        const q = JSON.parse(localStorage.getItem('unsentQueue') || '[]');
+        q.push(text);
+        localStorage.setItem('unsentQueue', JSON.stringify(q));
+        
         elements.chatInput.value = '';
         elements.chatInput.style.height = 'auto';
         
-        // Affichage temporaire en file d'attente piloté par ui.js
+        // Affichage temporaire optimiste
         localStorage.setItem('pendingUserMessage', text);
+        window.dispatchEvent(new CustomEvent('user-message-sent', { detail: text }));
         return;
     }
 

@@ -3,6 +3,9 @@
  * The Workbench is now primarily a fallback or used for workspace-level actions.
  */
 
+import { SELECTORS as SEL } from '../config/selectors.js';
+
+
 /**
  * Close history panel (Workbench specific)
  */
@@ -27,24 +30,16 @@ export async function closeHistory(cdp) {
     return { error: 'Failed' };
 }
 
-/**
- * Auto-launch Agent Manager from Workbench
- */
 export async function autoOpenManager(cdp) {
     if (!cdp) return false;
     const EXP = `(async () => {
         try {
-            const allBtns = Array.from(document.querySelectorAll('a, button, [role="button"]')).filter(b => b.offsetParent !== null);
-            const managerBtn = allBtns.find(btn => {
-                const t = (btn.getAttribute('title') || '').toLowerCase();
-                const a = (btn.getAttribute('aria-label') || '').toLowerCase();
-                const x = (btn.innerText || '').toLowerCase();
-                return t.includes('agent manager') || a.includes('agent manager') || x.includes('agent manager');
-            });
-            if (managerBtn) { managerBtn.click(); return { success: true }; }
-            const fb = document.querySelector('#workbench\\\\.parts\\\\.titlebar .titlebar-right .action-toolbar-container a');
-            if (fb) { fb.click(); return { success: true }; }
-            return { error: 'Not found' };
+            const fb = document.querySelector('${SEL.workbench.managerButton}');
+            if (!fb) {
+                 throw new Error('[CDP] Selector broken: "${SEL.workbench.managerButton}" — element not found in autoOpenManager(). Update src/config/selectors.js');
+            }
+            fb.click();
+            return { success: true };
         } catch(e) { return { error: e.toString() }; }
     })()`;
 
@@ -52,7 +47,13 @@ export async function autoOpenManager(cdp) {
         try {
             const res = await cdp.call("Runtime.evaluate", { expression: EXP, returnByValue: true, awaitPromise: true, contextId: ctx.id });
             if (res.result?.value?.success) return true;
-        } catch (e) {}
+            if (res.result?.value?.error) {
+                 console.error(res.result.value.error); // Fait loguer l'erreur côté serveur
+                 throw new Error(res.result.value.error); // Propage au serveur
+            }
+        } catch (e) {
+            throw e; // Laisse server.js attraper l'erreur et l'afficher
+        }
     }
     return false;
 }

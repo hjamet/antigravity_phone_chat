@@ -22,15 +22,11 @@ export const elements = {
     projectsLayer: document.getElementById('projectsLayer'),
 };
 
-// State tracking
-let lastRenderedHash = '';
-
 /**
  * Render chat state from /api/chat-state response.
- * Performs STRICT incremental DOM updates:
- *  - Only touched when hash changes.
- *  - Existing elements are updated via innerHTML only (no className reassignment).
- *  - New elements get a one-time fade-in class.
+ * ZERO-FLICKER: Each message has its own hash. Only messages whose hash changed
+ * are patched via textContent/innerHTML. No coarse gatekeeping hash — the per-message
+ * hash comparison IS the gate.
  */
 export function renderChatState(state) {
     if (!state) return;
@@ -40,22 +36,17 @@ export function renderChatState(state) {
     
     const messages = state.messages || [];
     
-    // Build a stable hash for coarse change detection
-    const hash = messages.map(m =>
-        `${m.type}:${m.role}:${(m.title||'')}:${m.allStatuses?.length||0}:${(m.content||'').length}`
-    ).join('|') + (state.isStreaming ? ':S' : ':X');
-    
-    if (hash === lastRenderedHash) return;
-    lastRenderedHash = hash;
-    
     // Check if user is near the bottom before update
     const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
     
     // Remove initial loading state on first render
-    container.querySelectorAll('.loading-state').forEach(el => el.remove());
+    const loadingEls = container.querySelectorAll('.loading-state');
+    if (loadingEls.length > 0) loadingEls.forEach(el => el.remove());
     
     // Get existing message divs (exclude streaming indicator)
     const existing = Array.from(container.querySelectorAll('.chat-msg'));
+    
+    let anyChanged = false;
     
     // Update or create each message
     for (let i = 0; i < messages.length; i++) {
@@ -63,34 +54,39 @@ export function renderChatState(state) {
         const msgHash = getMessageHash(msg);
         
         if (i < existing.length) {
-            // Only update innerHTML if hash differs — never touch className
-            if (existing[i].getAttribute('data-hash') !== msgHash) {
-                existing[i].innerHTML = buildMessageInner(msg);
-                existing[i].setAttribute('data-hash', msgHash);
+            const el = existing[i];
+            // ONLY touch this element if its content actually changed
+            if (el.getAttribute('data-hash') !== msgHash) {
+                anyChanged = true;
+                // Patch inner content directly — never touch className or outer element
+                el.innerHTML = buildMessageInner(msg);
+                el.setAttribute('data-hash', msgHash);
             }
         } else {
-            // Brand new element — create with fade-in
+            // Brand new element — append with one-time fade-in
+            anyChanged = true;
             const div = document.createElement('div');
             div.className = getCssClass(msg) + ' chat-msg-enter';
             div.innerHTML = buildMessageInner(msg);
             div.setAttribute('data-hash', msgHash);
             container.appendChild(div);
-            // Remove one-time animation class after it completes
             div.addEventListener('animationend', () => div.classList.remove('chat-msg-enter'), { once: true });
         }
     }
     
-    // Remove extra old elements
-    const currentMsgs = container.querySelectorAll('.chat-msg');
-    for (let i = messages.length; i < currentMsgs.length; i++) {
-        currentMsgs[i].remove();
+    // Remove extra old elements (only if message count decreased)
+    if (existing.length > messages.length) {
+        for (let i = messages.length; i < existing.length; i++) {
+            existing[i].remove();
+        }
+        anyChanged = true;
     }
 
     // Streaming indicator
     updateStreamingIndicator(state.isStreaming);
 
-    // Only auto-scroll if user was near the bottom
-    if (isNearBottom) {
+    // Only auto-scroll if something changed AND user was near the bottom
+    if (anyChanged && isNearBottom) {
         container.scrollTop = container.scrollHeight;
     }
     
@@ -107,10 +103,18 @@ function getCssClass(msg) {
 }
 
 /**
- * Generate a simple hash from message contents
+ * Generate a hash from message contents.
+ * This hash is the SOLE gate for DOM updates — it must include everything
+ * that affects the visual rendering of the message.
  */
 function getMessageHash(msg) {
-    const s = `${msg.type}:${msg.role}:${(msg.content||'').substring(0,60)}:${(msg.html||'').length}:${msg.title||''}:${msg.status||''}:${msg.allStatuses?.length||0}`;
+    const s = [
+        msg.type || '',
+        msg.role || '',
+        msg.title || '',
+        (msg.content || '').substring(0, 80),
+        String(msg.allStatuses?.length || 0),
+    ].join(':');
     let hash = 0;
     for (let i = 0; i < s.length; i++) {
         hash = Math.imul(31, hash) + s.charCodeAt(i) | 0;
@@ -119,21 +123,7 @@ function getMessageHash(msg) {
 }
 
 /**
- * Filter out noise from allStatuses (terminal commands, system events)
- */
-function isCleanStatus(s) {
-    if (!s || s.length < 5) return false;
-    if (s.includes('> ') && s.includes('node ')) return false;
-    if (s.includes('Client connected') || s.includes('Client disconnected')) return false;
-    if (s.includes('\\') && !s.includes(' ')) return false;
-    if (/^…?\\/.test(s)) return false;
-    if (s.startsWith('Running command')) return false;
-    return true;
-}
-
-/**
- * Build the INNER HTML of a message div (not the wrapper).
- * The wrapper div is created separately so we never reassign className.
+ * Build the INNER HTML of a message div.
  */
 function buildMessageInner(msg) {
     const renderContent = (m) => {
@@ -154,23 +144,40 @@ function buildMessageInner(msg) {
         let html = '';
         if (msg.title) html += `<div class="task-title">🎯 ${escapeHtml(msg.title)}</div>`;
         
-        // Paragraph (TaskSummary) right after the title
-        if (msg.html || msg.content) html += `<div class="task-paragraph">${renderContent(msg)}</div>`;
-        
-        // Numbered subtitle list BELOW the paragraph
         const cleanStatuses = (msg.allStatuses || []).filter(isCleanStatus);
+        const paragraphHtml = (msg.html || msg.content) ? `<div class="task-paragraph">${renderContent(msg)}</div>` : '';
+        
         if (cleanStatuses.length > 0) {
             html += '<div class="task-steps">';
             cleanStatuses.forEach((s, i) => {
                 html += `<div class="task-step"><span class="step-num">${i + 1}</span><span class="step-text">${formatMarkdown(s, true)}</span></div>`;
+                // Place the paragraph directly under the LAST step
+                if (i === cleanStatuses.length - 1 && paragraphHtml) {
+                    html += paragraphHtml;
+                }
             });
             html += '</div>';
+        } else {
+            html += paragraphHtml;
         }
         
         return html;
     } else {
         return `<div class="msg-label">Agent</div><div class="msg-body">${renderContent(msg)}</div>`;
     }
+}
+
+/**
+ * Filter out noise from allStatuses (frontend-side double-check)
+ */
+function isCleanStatus(s) {
+    if (!s || s.length < 5) return false;
+    if (s.includes('> ') && s.includes('node ')) return false;
+    if (s.includes('Client connected') || s.includes('Client disconnected')) return false;
+    if (s.includes('\\') && !s.includes(' ')) return false;
+    if (/^…?\\/.test(s)) return false;
+    if (s.startsWith('Running command')) return false;
+    return true;
 }
 
 /**
@@ -215,7 +222,10 @@ function updateStreamingIndicator(isStreaming) {
     if (indicator) {
         if (isStreaming) {
             indicator.classList.add('active');
-            elements.chatContent?.appendChild(indicator);
+            // Only move to end if it's not already the last child
+            if (indicator.parentNode !== elements.chatContent || indicator !== elements.chatContent.lastElementChild) {
+                elements.chatContent?.appendChild(indicator);
+            }
         } else {
             indicator.classList.remove('active');
         }

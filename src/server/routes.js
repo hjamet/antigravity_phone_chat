@@ -135,12 +135,6 @@ export function setupRoutes(app, {
         res.json(result);
     });
 
-    router.post('/remote-scroll', async (req, res) => {
-        const { scrollTop, scrollPercent } = req.body;
-        const result = await managerCdp.remoteScroll(cdpConnections.manager, scrollTop, scrollPercent);
-        res.json(result);
-    });
-
     router.get('/app-state', async (req, res) => {
         const result = await managerCdp.getAppState(cdpConnections.manager);
         res.json(result || { mode: 'Unknown', model: 'Unknown' });
@@ -164,140 +158,17 @@ export function setupRoutes(app, {
         }
     });
 
-    // Temporary debug endpoint to inspect DOM structure
+    // Debug DOM structure via UI Inspector
     router.get('/debug-dom', async (req, res) => {
         try {
-            const cdp = cdpConnections.manager;
-            if (!cdp || !cdp.ws || cdp.ws.readyState !== 1) {
-                return res.status(503).json({ error: 'No CDP connection' });
-            }
-            
-            const DEBUG_SCRIPT = `(async () => {
-                try {
-                    // Find the main turns container
-                    const chatScroll = Array.from(document.querySelectorAll('[class*="scrollbar-hide"][class*="overflow-y"]'))
-                        .filter(el => el.scrollHeight > 100 && el.offsetWidth > 200)
-                        .sort((a,b) => b.scrollHeight - a.scrollHeight)[0];
-                    if (!chatScroll) return { error: 'no chatScroll' };
-                    
-                    // Navigate to the flex container that holds turns
-                    const wrapper = chatScroll.children[0]; // mx-auto w-full
-                    const innerDiv = wrapper?.children[0]; // anonymous div
-                    const turnsDiv = innerDiv?.querySelector('.relative.flex.flex-col') || innerDiv; // relative flex flex-col gap-y-3 px-4
-                    
-                    const turns = Array.from(turnsDiv?.children || []);
-                    const lastTurns = turns.slice(-3);
-                    
-                    const turnsInfo = lastTurns.map((turn, idx) => {
-                        const globalIdx = turns.length - 3 + idx;
-                        
-                        // Check if this is a user turn or agent turn
-                        const userBlock = turn.querySelector('.bg-gray-500\\\\/15.select-text, [class*="bg-gray-500"][class*="select-text"]');
-                        const isolateBlocks = Array.from(turn.querySelectorAll('.isolate'));
-                        
-                        if (userBlock) {
-                            return {
-                                idx: globalIdx,
-                                type: 'user',
-                                textLen: userBlock.innerText?.length || 0,
-                                preview: (userBlock.innerText || '').substring(0, 100)
-                            };
-                        }
-                        
-                        // Agent turn: examine the .isolate blocks (each is a "reflection block")
-                        const blocks = isolateBlocks.map(iso => {
-                            // First child is typically the header/main paragraph
-                            const children = Array.from(iso.children);
-                            
-                            const blockInfo = {
-                                cls: (iso.className || '').substring(0, 80),
-                                childCount: children.length,
-                                sections: []
-                            };
-                            
-                            children.forEach((child, ci) => {
-                                const childCls = (child.className || '').toString();
-                                const text = (child.innerText || '').trim();
-                                
-                                blockInfo.sections.push({
-                                    idx: ci,
-                                    cls: childCls.substring(0, 80),
-                                    tag: child.tagName,
-                                    textLen: text.length,
-                                    preview: text.substring(0, 120),
-                                    // Check if it contains progress updates header
-                                    hasProgressUpdates: text.includes('Progress Updates'),
-                                    hasFilesEdited: text.includes('Files Edited'),
-                                    hasBackgroundSteps: text.includes('Background Steps'),
-                                    hasTask: text.includes('Task')
-                                });
-                            });
-                            
-                            return blockInfo;
-                        });
-                        
-                        // Also check for non-isolate select-text (agent's direct messages like notify_user)
-                        const directSelectTexts = Array.from(turn.querySelectorAll('.select-text.leading-relaxed'))
-                            .filter(el => !el.closest('.isolate'))
-                            .map(el => ({
-                                textLen: (el.innerText || '').length,
-                                preview: (el.innerText || '').substring(0, 100),
-                                cls: (el.className || '').substring(0, 80)
-                            }));
-                        
-                        return {
-                            idx: globalIdx,
-                            type: 'agent',
-                            totalTextLen: (turn.innerText || '').length,
-                            isolateBlocks: blocks,
-                            directMessages: directSelectTexts
-                        };
-                    });
-                    
-                    return {
-                        totalTurns: turns.length,
-                        turns: turnsInfo
-                    };
-                } catch(e) {
-                    return { error: e.message, stack: e.stack?.substring(0, 300) };
-                }
-            })()`;
-            
-            for (const ctx of cdp.contexts) {
-                try {
-                    const result = await cdp.call("Runtime.evaluate", {
-                        expression: DEBUG_SCRIPT,
-                        returnByValue: true,
-                        awaitPromise: true,
-                        contextId: ctx.id
-                    });
-                    if (result.result?.value && !result.result.value.error) {
-                        return res.json(result.result.value);
-                    }
-                } catch(e) { /* try next context */ }
-            }
-            return res.status(503).json({ error: 'No valid context found' });
-        } catch(e) {
-            return res.status(500).json({ error: e.message });
-        }
-    });
-    router.post('/remote-scroll', async (req, res) => {
-        try {
-            const { deltaY } = req.body;
-            if (!deltaY) return res.status(400).json({ error: 'Missing deltaY' });
-            const result = await managerCdp.remoteScroll(cdpConnections.manager, deltaY);
-            if (result && result.success) {
-                // Instantly update snapshot right after scrolling
-                const snapshot = await managerCdp.captureSnapshot(cdpConnections.manager, { fullScroll: false });
-                if (snapshot && !snapshot.error) {
-                    chatHistoryService.processSnapshot(snapshot);
-                }
-            }
+            const result = await debugManagerDom(cdpConnections.manager);
             res.json(result);
-        } catch(e) {
-            return res.status(500).json({ error: e.message });
+        } catch (e) {
+            res.status(503).json({ error: e.message });
         }
     });
+
+    // ... End of route list ...
 
     router.post('/new-chat', async (req, res) => {
         const result = await managerCdp.startNewChat(cdpConnections.manager);

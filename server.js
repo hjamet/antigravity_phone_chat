@@ -11,7 +11,7 @@ import os from 'os';
 import WebSocket from 'ws';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { inspectUI } from './src/cdp/ui_inspector.js';
+import { inspectUI, debugManagerDom } from './src/cdp/ui_inspector.js';
 import { execSync } from 'child_process';
 
 // Modular CDP Scripts
@@ -161,12 +161,17 @@ async function initCDP() {
     }
 
     if (cdpConnections.workbench && !targets.manager && !cdpConnections.manager) {
-        const launched = await workbenchCdp.autoOpenManager(cdpConnections.workbench);
-        if (launched) {
-            console.log('⏳ Waiting for Agent Manager to start...');
-            await new Promise(r => setTimeout(r, 2000));
-            const newTargets = await discoverCDP();
-            if (newTargets.manager) targets.manager = newTargets.manager;
+        try {
+            const launched = await workbenchCdp.autoOpenManager(cdpConnections.workbench);
+            if (launched) {
+                console.log('⏳ Waiting for Agent Manager to start...');
+                await new Promise(r => setTimeout(r, 2000));
+                const newTargets = await discoverCDP();
+                if (newTargets.manager) targets.manager = newTargets.manager;
+            }
+        } catch (error) {
+            console.error(error.message);
+            console.error('⚠️ Could not auto-open Agent Manager. Please open it manually in Antigravity.');
         }
     }
     
@@ -289,6 +294,7 @@ async function createServer() {
         workbenchCdp,
         managerCdp,
         inspectUI,
+        debugManagerDom,
         __dirname
     });
 

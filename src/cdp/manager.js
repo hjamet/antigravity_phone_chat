@@ -17,15 +17,18 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
             const chatScroll = Array.from(document.querySelectorAll(SEL.chat.scrollContainer))
                 .filter(el => el.scrollHeight > 100 && el.offsetWidth > 200)
                 .sort((a,b) => b.scrollHeight - a.scrollHeight)[0];
-            if (!chatScroll) return { error: 'No chat scroll container found' };
+            
+            if (!chatScroll) throw new Error('[CDP] Selector broken: SEL.chat.scrollContainer — chat scroll area not found');
             
             const originalScroll = chatScroll.scrollTop;
             const scrollHeight = chatScroll.scrollHeight;
             const clientHeight = chatScroll.clientHeight;
             const wrapper = chatScroll.children[0];
-            if (!wrapper) return { error: 'No wrapper found' };
+            if (!wrapper) throw new Error('[CDP] Chat wrapper not found');
+            
             const inner = wrapper.children[0];
-            if (!inner) return { error: 'No inner found' };
+            if (!inner) throw new Error('[CDP] Chat inner div not found');
+            
             const turnsDiv = inner.querySelector(SEL.chat.turnsContainer) || inner;
             
             const collected = [];
@@ -34,157 +37,111 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
             function extractVisible() {
                 const turns = Array.from(turnsDiv.children);
                 for (const turn of turns) {
-                    const tt = (turn.innerText || '').trim();
-                    if (tt.length < 5) continue;
-                    
-                    // USER
+                    // 1. USER Messages
                     const ue = turn.querySelector(SEL.user.messageBlock);
                     if (ue) {
-                        const pc = (ue.parentElement?.className || '').toString();
-                        if (pc.includes('group')) {
-                            const ut = (ue.innerText || '').trim();
-                            if (ut.length > 10) {
-                                const k = 'u:' + ut.substring(0, 80);
-                                if (!seen.has(k)) { seen.add(k); collected.push({ role: 'user', type: 'message', content: ut, html: '' }); }
+                        const ut = (ue.innerText || '').trim();
+                        if (ut.length > 5) {
+                            const k = 'u:' + ut.substring(0, 80);
+                            if (!seen.has(k)) { 
+                                seen.add(k); 
+                                collected.push({ role: 'user', type: 'message', content: ut, html: '' }); 
                             }
-                            // Do NOT continue — same turn may contain agent isolate blocks
                         }
                     }
                     
-                    // AGENT block content
-                    const isos = Array.from(turn.querySelectorAll(SEL.agent.taskBlock));
+                    // 2. AGENT Task Blocks (with UI)
+                    // We only target .isolate.mb-2, ignoring .isolate (thought blocks)
+                    const isos = Array.from(turn.querySelectorAll(SEL.agentTask.taskBlockWithUI));
                     for (const iso of isos) {
-                        const ch = Array.from(iso.children);
-                        let mp = '', mh = '', tt2 = '';
-                        let pts = [];
+                        let taskTitle = '', taskSummary = '', taskStatus = '', mh = '';
+                        let allStatuses = [];
                         
-                        const te = iso.querySelector('h1, h2, h3, h4, strong, b');
-                        if (te) { const t = (te.innerText||'').trim(); if (t.length > 5 && t.length < 150) tt2 = t; }
-                        for (const c of ch) {
-                            const ct = (c.innerText || '').trim();
-                            const cc = (c.className || '').toString();
-                            if (ct.length < 3) continue;
-                            
-                            // border-t sections: Files Edited, Background Steps, Progress Updates
-                            // We ONLY want Progress Updates — skip the rest entirely
-                            if (cc.includes('border-t')) {
-                                // Check the first child's text to identify the section type
-                                const firstChildText = c.children[0] ? (c.children[0].innerText || '').trim() : '';
-                                if (firstChildText.startsWith('Files Edited') || firstChildText.startsWith('Background Steps')) {
-                                    continue; // Skip noise sections completely
-                                }
-                                // Only process if this is actually Progress Updates
-                                if (!ct.includes('Progress Updates') && !firstChildText.includes('Progress Updates')) {
-                                    continue;
-                                }
-                            }
-                            
-                            const isProg = ct.includes('Progress Updates');
-                            if (isProg) {
-                                ct.split('\\n').filter(l => l.trim().length > 5).forEach(l => {
-                                    const tr = l.trim().replace(/content_copy/g, '').replace(/thumb_up/g, '').replace(/thumb_down/g, '').trim();
-                                    if (tr !== 'Progress Updates' && tr !== 'Collapse all' && !/^\\d+$/.test(tr) && tr.length > 10 && tr.length < 200) {
-                                        const noisePatterns = [
-                                            'Files Edited', 'Background Steps', 'Running command', 'Ran command', 'Thought for ',
-                                            'Running background', 'Exit code', 'Always run', 'Cancel',
-                                            'Edited', 'Created', 'Deleted', 'Analyzed', 'Viewing',
-                                            '=== ', '{"', '📸 ', '✅ ', '❌ ', '💾 ', '🔍 ', '🚀 ', '⚠️ ',
-                                            'Output snapshot', 'The command',
-                                            'Successfully', 'No output',
-                                            'Expand all', 'Collapse all', 'Show more', 'Show less',
-                                            'Step Id:', 'tool call', 'Saved', 'Cau...', 'Read '
-                                        ];
-                                        const isNoise = noisePatterns.some(p => tr.startsWith(p) || tr === p);
-                                        const isBareFilename = /^[a-zA-Z0-9_\\-]+\\.(js|ts|md|json|py|css|html)(#L\\d+.*)?$/.test(tr);
-                                        const isSingleWord = tr.split(' ').length <= 2 && tr.length < 30;
-                                        const isPath = tr.includes('\\\\') && !tr.includes(' ');
-                                        
-                                        if (!isNoise && !isBareFilename && !isSingleWord && !isPath && !/^\\{.*\\}$/.test(tr)) {
-                                            pts.push(tr);
-                                        }
-                                    }
-                                });
-                            } else if (!mp && ct.length > 15) {
-                                const cl = c.cloneNode(true);
-                                cl.querySelectorAll('button,[role="button"],.google-symbols,style,details').forEach(n=>n.remove());
-                                
-                                // Attach temporarily with opacity 0 to get proper innerText layout without Trusted Types / Regex issues
-                                cl.style.position = 'absolute';
-                                cl.style.opacity = '0';
-                                cl.style.pointerEvents = 'none';
-                                document.body.appendChild(cl);
-                                
-                                // Fix local image URLs before reading HTML so they don't break in WAD
+                        // A. Extract TaskName (Title)
+                        const titleEl = iso.querySelector(SEL.agentTask.title);
+                        if (titleEl) taskTitle = (titleEl.innerText || '').trim();
+                        
+                        // B. Extract TaskSummary (Paragraph)
+                        const header = iso.querySelector(SEL.agentTask.headerWrapper);
+                        if (header) {
+                            const summaryEl = header.querySelector(SEL.agentTask.summaryContent);
+                            if (summaryEl) {
+                                taskSummary = (summaryEl.innerText || '').trim();
+                                // Fix local image URLs in HTML
+                                const cl = summaryEl.cloneNode(true);
                                 cl.querySelectorAll('img').forEach(img => {
                                     const src = img.getAttribute('src');
-                                    if (src && src.startsWith('/')) {
-                                        img.src = 'http://localhost:9000' + src;
-                                    }
+                                    if (src && src.startsWith('/')) img.src = 'http://localhost:9000' + src;
                                 });
-                                
-                                let text = (cl.innerText||'').trim().replace(/content_copy/g,'').replace(/thumb_up/g,'').replace(/thumb_down/g,'').trim();
-                                
-                                const lines = text.split('\\n').map(l => l.trim()).filter(l => l.length > 0);
-                                if (lines.length > 1 && lines[0].length < 150) {
-                                    tt2 = lines[0];
-                                    text = lines.slice(1).join('\\n').trim();
-                                } else if (te && !tt2) {
-                                    tt2 = (te.innerText || '').trim();
-                                    if (tt2.length < 5 || tt2.length > 150) tt2 = '';
-                                }
-                                
-                                // Strict noise filter for paragraphs (agent thoughts)
-                                const isThought = text.length > 400 || 
-                                                  text.includes("CRITICAL INSTRUCTION") || 
-                                                  text.includes("Tools: I need to") || 
-                                                  text.includes("Let's look at") ||
-                                                  text.includes("Wait, if");
-                                                  
-                                if (!isThought) {
-                                    mp = text;
-                                    mh = cl.innerHTML || '';
-                                }
-                                
-                                cl.remove();
+                                mh = cl.innerHTML || '';
                             }
                         }
-                        if ((mp && mp.length > 15) || (tt2 && tt2.length > 5) || pts.length > 0) {
-                            const currentStatus = pts.length > 0 ? pts[pts.length - 1] : '';
-                            const k = 'tb:' + (tt2 || '') + ':' + (mp ? mp.substring(0, 80) : pts.join('').substring(0, 80));
+                        
+                        // C. Extract TaskStatus(es) from Progress Updates section
+                        const sections = Array.from(iso.querySelectorAll(SEL.agentTask.sectionBorderT));
+                        for (const sec of sections) {
+                            const labelEl = sec.querySelector(SEL.agentTask.sectionLabelProgress);
+                            if (labelEl) {
+                                // This is definitively the Progress Updates section
+                                const scrollable = sec.querySelector(SEL.agentTask.progressScrollable);
+                                if (scrollable) {
+                                    // Steps have sticky headers containing TaskStatus
+                                    const statusHeaders = Array.from(scrollable.querySelectorAll(SEL.agentTask.statusHeader));
+                                    for (const sh of statusHeaders) {
+                                        const textEl = sh.querySelector(SEL.agentTask.statusText);
+                                        if (textEl) {
+                                            const st = (textEl.innerText || '').trim();
+                                            // Check against numbers (like "1", "2") often present in these headers
+                                            if (st && st.length > 5 && !/^\\d+$/.test(st)) {
+                                                allStatuses.push(st);
+                                                taskStatus = st; // Most recent step
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (taskTitle || taskSummary || allStatuses.length > 0) {
+                            const k = 'tb:' + (taskTitle || '') + ':' + (taskSummary ? taskSummary.substring(0, 80) : allStatuses.join('').substring(0, 80));
                             if (!seen.has(k)) {
                                 seen.add(k);
                                 collected.push({
                                     role: 'agent',
                                     type: 'taskBlock',
-                                    taskTitle: tt2 || 'Action en cours',
-                                    taskStatus: currentStatus,
-                                    taskSummary: mp,
-                                    allStatuses: pts,
+                                    taskTitle: taskTitle || 'Action en cours',
+                                    taskStatus: taskStatus,
+                                    taskSummary: taskSummary,
+                                    allStatuses: allStatuses,
                                     html: mh.substring(0, 30000)
                                 });
                             }
                         }
                     }
                     
-                    // AGENT direct messages
-                    const dms = Array.from(turn.querySelectorAll(SEL.agent.directMessage)).filter(el => !el.closest(SEL.agent.taskBlock));
+                    // 3. AGENT Direct Messages (outside task blocks)
+                    const dms = Array.from(turn.querySelectorAll(SEL.agent.directMessage))
+                        .filter(el => !el.closest(SEL.agent.taskBlock));
                     for (const dm of dms) {
-                        const cl = dm.cloneNode(true);
-                        cl.querySelectorAll('button,[role="button"],.google-symbols,style,details,' + SEL.agent.taskBlock).forEach(n=>n.remove());
-                        const ct = (cl.innerText||'').trim().replace(/content_copy/g,'').replace(/thumb_up/g,'').replace(/thumb_down/g,'').trim();
+                        const ct = (dm.innerText || '').trim();
                         if (ct.length > 20) {
                             const k = 'dm:' + ct.substring(0, 80);
-                            if (!seen.has(k)) { seen.add(k); collected.push({ role:'agent', type:'directMessage', content:ct, html:(cl.innerHTML||'').substring(0,50000) }); }
+                            if (!seen.has(k)) { 
+                                seen.add(k); 
+                                collected.push({ 
+                                    role: 'agent', 
+                                    type: 'directMessage', 
+                                    content: ct, 
+                                    html: (dm.innerHTML || '').substring(0, 50000) 
+                                }); 
+                            }
                         }
                     }
                 }
             }
             
-            // Extract from current DOM position only (no scroll - cache in server.js handles persistence)
             extractVisible();
-            
             const isStreaming = wrapper ? !!wrapper.querySelector(SEL.chat.streamingIndicator) : false;
-            
             return { messages: collected, isFull: false, isStreaming, scrollInfo: { scrollTop: chatScroll.scrollTop, scrollHeight, clientHeight } };
         } catch(e) { return { error: e.toString() }; }
     })()`;
@@ -880,51 +837,42 @@ export async function listProjects(cdp) {
 export async function openProject(cdp, { index, name }) {
     if (!cdp) throw new Error("Agent Manager not connected");
 
+    const projectName = name;
     const EXP = `(async () => {
         try {
-            const targetName = ${JSON.stringify(name || '')};
-            const targetIndex = ${JSON.stringify(index !== undefined ? index : -1)};
+            const targetName = "${projectName.replace(/"/g, '\\"')}";
             
-            // First open the workspace dropdown
-            const allSpans = Array.from(document.querySelectorAll('span'));
-            const workspaceSpan = allSpans.find(s => s.innerText?.trim() === 'Workspaces' || s.innerText?.trim() === 'Workspace');
+            // 1. Ouvrir le menu Workspace
+            const btn = document.querySelector('${SEL.sidebar.openWorkspaceButton}');
+            if (!btn) throw new Error('[CDP] Selector broken: "${SEL.sidebar.openWorkspaceButton}" — element not found in openProject(). Update src/config/selectors.js');
             
-            let wsBtn = null;
-            if (workspaceSpan) {
-                const container = workspaceSpan.closest('div.flex');
-                if (container) wsBtn = container.querySelector('button');
-            }
-            if (!wsBtn) wsBtn = Array.from(document.querySelectorAll('button')).find(b => (b.innerText || '').includes('add'));
+            btn.click();
+            await new Promise(r => setTimeout(r, 600)); // Attendre l'animation
             
-            if (wsBtn) {
-                wsBtn.click();
-                await new Promise(r => setTimeout(r, 600));
-            } else {
-                return { error: 'Workspace "+" button not found' };
+            // 2. Chercher l'élément correspondant
+            const items = Array.from(document.querySelectorAll('${SEL.sidebar.workspaceListItems}'));
+            if (items.length === 0) {
+                 document.body.click();
+                 throw new Error('[CDP] Selector broken: "${SEL.sidebar.workspaceListItems}". Menu empty in openProject().');
             }
             
-            const items = document.querySelectorAll('div.px-2\\\\.5.cursor-pointer, [role="menuitem"], .monaco-list-row');
-            let targetEl = null;
-
-            if (targetIndex >= 0 && targetIndex < items.length) {
-                targetEl = items[targetIndex];
-            } else if (targetName) {
-                for (const item of items) {
-                    const nameSpan = item.querySelector('span.text-sm > span') || item.querySelector('.monaco-highlighted-label') || item;
-                    if ((nameSpan.innerText || '').trim() === targetName) {
-                        targetEl = item; break;
-                    }
-                }
-            }
-            if (targetEl) {
-                targetEl.click();
-                return { success: true };
+            const targetItem = items.find(el => {
+                const nameNode = el.querySelector('${SEL.sidebar.workspaceItemName}');
+                return nameNode && nameNode.innerText.trim() === targetName;
+            });
+            
+            if (!targetItem) {
+                document.body.click();
+                return { success: false, error: "Project '"+targetName+"' not found in dropdown list." };
             }
             
-            // Close dropdown if ignored
-            document.body.click();
-            return { error: 'Project not found' };
-        } catch (err) { return { error: err.toString() }; }
+            // 3. Cliquer sur le projet
+            targetItem.click();
+            
+            return { success: true, message: "Opening project..." };
+        } catch (error) {
+            return { success: false, error: error.toString() };
+        }
     })()`;
 
     for (const ctx of cdp.contexts) {

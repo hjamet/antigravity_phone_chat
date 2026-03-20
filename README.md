@@ -27,7 +27,7 @@ L'application agit comme un proxy intelligent :
 - **Backend (Node.js)** : Architecture en couches modulaire. `server.js` (Bootstrap), `routes.js` (Présentation API), et `ws.js` (WebSockets).
 - **Service (Métier)** : `src/server/services/ChatHistoryService.js` gère la chronologie et valide les données.
 - **Validation (Zod)** : `src/schemas/snapshot.js` assure que toutes les données extraites respectent le format attendu.
-- **Scripts CDP** : `src/cdp/manager.js` extrait le contenu du DOM dynamiquement à l'aide des sélecteurs centralisés dans `src/config/selectors.js`.
+- **Scripts CDP** : `src/cdp/manager.js` extrait le contenu du DOM via des **sélecteurs CSS stricts** (no-fallback) centralisés dans `src/config/selectors.js`. Diagnostics via `src/cdp/ui_inspector.js`.
 - **Messages utilisateur** : Stockés en `localStorage` côté client quand envoyés, car la virtualisation du DOM de l'Agent Manager empêche leur extraction fiable.
 - **Tunneling (Cloudflare)** : Expose l'interface mobile via un tunnel sécurisé avec mot de passe.
 - **Frontend (ES Modules)** : Interface découpée en modules indépendants (`public/js/`) — seuls les 2 derniers messages (user + agent) sont affichés.
@@ -96,6 +96,12 @@ L'application agit comme un proxy intelligent :
 | 12 | **Refonte API & Architecture en Couches** | ✅ Fait | [api-layered-architecture.md](docs/tasks/api-layered-architecture.md) |
 | 13 | **Extraction Sélecteurs CSS** | ✅ Fait | [selector-config-extraction.md](docs/tasks/selector-config-extraction.md) |
 | 14 | **Validation Snapshots & Tests (Zod)** | ✅ Fait | [snapshot-validation-tests.md](docs/tasks/snapshot-validation-tests.md) |
+| 15 | **Diagnostic DOM — Script de capture** | ✅ Fait | [dom-diagnostic-script.md](docs/tasks/dom-diagnostic-script.md) |
+| 16 | **Fix Auto-Ouverture Manager** | ✅ Fait | [fix-auto-open-manager.md](docs/tasks/fix-auto-open-manager.md) |
+| 17 | **Fix Sélection Workspaces** | ✅ Fait | [fix-workspace-selection.md](docs/tasks/fix-workspace-selection.md) |
+| 18 | **Nettoyage fichiers debug** | ✅ Fait | [cleanup-debug-files.md](docs/tasks/cleanup-debug-files.md) |
+| 19 | **Nettoyage routes (Dette)** | ✅ Fait | [cleanup-routes-debug.md](docs/tasks/cleanup-routes-debug.md) |
+| 20 | **Refonte Extraction Chat (No-Fallback)** | ✅ Fait | [refactor-chat-extraction-selectors.md](docs/tasks/refactor-chat-extraction-selectors.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

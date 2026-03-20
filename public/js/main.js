@@ -3,20 +3,31 @@
  * Phase 5: Polls /api/chat-state every second as primary update mechanism
  */
 
-import { initWS } from './ws.js?v=4';
-import { elements, renderChatState, renderSnapshot, updateStateUI, toggleLayer } from './ui.js?v=4';
-import { sendMessage, stopGeneration, scrollToBottom } from './chat.js?v=4';
-import { loadHistory, startNewChat } from './history.js?v=4';
-import { loadProjects } from './projects.js?v=4';
-import { fetchWithAuth } from './api.js?v=4';
+import { initWS } from './ws.js?v=7';
+import { elements, renderChatState, renderSnapshot, updateStateUI, toggleLayer } from './ui.js?v=7';
+import { sendMessage, stopGeneration, scrollToBottom } from './chat.js?v=7';
+import { loadHistory, startNewChat } from './history.js?v=7';
+import { loadProjects } from './projects.js?v=7';
+import { fetchWithAuth } from './api.js?v=7';
 
 /**
- * Poll /api/chat-state and render
+ * Poll /api/chat-state and render.
+ * Caches the raw JSON string — if identical to last poll, renderChatState is NOT called at all.
+ * This prevents any DOM work (querySelector, hash computation, streaming indicator, etc.)
+ * when the backend has nothing new, which eliminates flickering completely.
  */
+let _lastPollJson = '';
+
 async function pollChatState() {
     try {
         const res = await fetchWithAuth(`/api/chat-state?t=${Date.now()}`);
-        const data = await res.json();
+        const text = await res.text();
+        
+        // Skip rendering entirely if response is identical
+        if (text === _lastPollJson) return;
+        _lastPollJson = text;
+        
+        const data = JSON.parse(text);
         if (data && !data.error) {
             renderChatState(data);
         }

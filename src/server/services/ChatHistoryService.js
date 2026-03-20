@@ -47,19 +47,46 @@ export class ChatHistoryService {
             if (msg.type === 'taskBlock') {
                 if (!msg.taskSummary && (!msg.allStatuses || msg.allStatuses.length === 0)) continue;
                 
-                // Keep the block based on its TaskTitle or the start of its summary
-                const k = msg.taskTitle || msg.taskSummary.substring(0, 50);
+                // Determine a key for finding existing blocks, prioritizing taskTitle
+                const k = msg.taskTitle || (msg.taskSummary ? msg.taskSummary.substring(0, 50) : '');
+                
+                // Find an existing taskBlock in the timeline that matches the current message
                 const existingIdx = this.chatTimeline.findIndex(m => 
                     m.type === 'taskBlock' && 
-                    (m.taskTitle === msg.taskTitle || m.taskSummary.substring(0, 50) === k)
+                    (m.taskTitle === msg.taskTitle || (m.taskSummary && m.taskSummary.substring(0, 50) === k))
                 );
                 
                 if (existingIdx !== -1) {
-                    // Overwrite entirely with the latest layout from CDP if the new one has a summary
-                    if (msg.taskSummary && msg.taskSummary.length > 0) {
-                        this.chatTimeline[existingIdx] = msg;
+                    // Update existing block
+                    const existingBlock = this.chatTimeline[existingIdx];
+                    
+                    // CRITICAL: Never let 'Thought for' blocks overwrite the real task paragraph!
+                    const isThought = msg.taskTitle && msg.taskTitle.includes('Thought for');
+
+                    // Update taskTitle if present and not a 'Thought for' block
+                    if (msg.taskTitle && !isThought && msg.taskTitle.length < 50) {
+                        existingBlock.taskTitle = msg.taskTitle;
                     }
+                    // Update taskStatus if present
+                    if (msg.taskStatus) {
+                        existingBlock.taskStatus = msg.taskStatus;
+                    }
+                    
+                    // Only apply taskSummary/taskSummaryHtml if it's not a 'Thought for' block
+                    if (!isThought) {
+                        if (msg.taskSummary) existingBlock.taskSummary = msg.taskSummary;
+                        if (msg.taskSummaryHtml) existingBlock.taskSummaryHtml = msg.taskSummaryHtml;
+                    }
+
+                    // Update allStatuses by merging, ensuring uniqueness and order
+                    if (msg.allStatuses && msg.allStatuses.length > 0) {
+                        const newStatuses = new Set(existingBlock.allStatuses);
+                        msg.allStatuses.forEach(status => newStatuses.add(status));
+                        existingBlock.allStatuses = Array.from(newStatuses);
+                    }
+
                 } else {
+                    // Add new block
                     this.chatTimeline.push({...msg}); 
                     console.log(`💾 Added step: [${msg.taskTitle || 'No Title'}]`);
                 }
@@ -222,7 +249,7 @@ export class ChatHistoryService {
             if (s.includes(':')) return false;
             
             // Reject conversational text (reasoning, questions, explanations)
-            if (/^(Now |But |Also |The |I |This |Still |However |Wait|Looking|Found )/i.test(s)) return false;
+            if (/^(Now |But |Also |The |I |This |Still |However |Wait|Looking|Found |Error |Sent )/i.test(s)) return false;
             if (/^(Let me|I need|I can|I see|That means|Need to)+/i.test(s)) return false;
             
             // Must have at least 4 words (real statuses are descriptive phrases)

@@ -44,6 +44,9 @@ registry/
 # Scratch / Temporary snapshots
 scratch/
 debug/
+dom_debug.json
+snapshot_debug.json
+test_output.*
 
 # Cursor Memory Bank
 .cursor/mcp

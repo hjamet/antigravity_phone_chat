@@ -16,3 +16,9 @@
 | [Chat in Project](tasks/chat-in-project.md) | Gestion des conversations par projet | 2025-01-01 | `Legacy` |
 | [Project Selector UI](tasks/project-selector-ui.md) | Interface mobile de sélection de projet | 2025-01-01 | `Legacy` |
 | [Cleanup UI Mobile](tasks/cleanup-ui-mobile.md) | Optimisations UI pour mobile | 2025-01-01 | `Legacy` |
+| [Diagnostic DOM — Script de capture](tasks/dom-diagnostic-script.md) | Script de capture structurée du DOM pour diagnostiquer les sélecteurs | 2026-03-20 | `Up to date` |
+| [Fix Auto-Ouverture Manager](tasks/fix-auto-open-manager.md) | Correction de l'auto-ouverture de l'Agent Manager au démarrage | 2026-03-20 | `Up to date` |
+| [Fix Sélection Workspaces](tasks/fix-workspace-selection.md) | Correction de la sélection de workspaces depuis l'interface mobile | 2026-03-20 | `Up to date` |
+| [Nettoyage fichiers debug](tasks/cleanup-debug-files.md) | Déplacer/supprimer les fichiers test et debug de la racine | 2026-03-20 | `Up to date` |
+| [Nettoyage routes (Dette)](tasks/cleanup-routes-debug.md) | Extraction du bloc de debug CDP hors du contrôleur `routes.js` | 2026-03-20 | `Up to date` |
+| [Refonte Extraction Chat (No-Fallback)](tasks/refactor-chat-extraction-selectors.md) | Migration de `captureSnapshot` vers des CSS Selectors stricts sans heuristiques textuelles | 2026-03-20 | `Up to date` |

@@ -102,6 +102,7 @@ L'application agit comme un proxy intelligent :
 | 18 | **Nettoyage fichiers debug** | ✅ Fait | [cleanup-debug-files.md](docs/tasks/cleanup-debug-files.md) |
 | 19 | **Nettoyage routes (Dette)** | ✅ Fait | [cleanup-routes-debug.md](docs/tasks/cleanup-routes-debug.md) |
 | 20 | **Refonte Extraction Chat (No-Fallback)** | ✅ Fait | [refactor-chat-extraction-selectors.md](docs/tasks/refactor-chat-extraction-selectors.md) |
+| 21 | **Refactoring Commandes CDP (No-Fallback)** | 🔴 À faire | [refactor-cdp-controls-nofallback.md](docs/tasks/refactor-cdp-controls-nofallback.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

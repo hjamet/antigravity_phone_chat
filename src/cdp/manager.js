@@ -177,55 +177,40 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
 export async function getAvailableModels(cdp) {
     if (!cdp) return [];
     const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
         try {
-            // Find model button (contains model name like "Claude", "Gemini", "GPT")
-            const inputBox = document.getElementById('antigravity.agentSidePanelInputBox');
-            if (!inputBox) return { models: [] };
-            
-            const parent = inputBox.parentElement?.parentElement?.parentElement;
-            if (!parent) return { models: [] };
-            
-            const KNOWN = ["Claude", "Gemini", "GPT"];
-            const modelBtns = Array.from(parent.querySelectorAll('button'))
-                .filter(b => KNOWN.some(k => (b.innerText || '').includes(k)));
-            
-            if (modelBtns.length === 0) return { models: [] };
-            
-            const modelBtn = modelBtns[0];
+            const inputBox = document.querySelector(SEL.controls.inputBox);
+            if (!inputBox) throw new Error('[CDP] Selector broken: "' + SEL.controls.inputBox + '" — not found in getAvailableModels()');
+
+            // Find the model clickable element inside the controls row
+            const controlsRow = inputBox.querySelector(SEL.controls.controlsRow);
+            if (!controlsRow) throw new Error('[CDP] Selector broken: "' + SEL.controls.controlsRow + '" — not found in getAvailableModels()');
+
+            const modelBtn = controlsRow.querySelector(SEL.controls.modelClickable);
+            if (!modelBtn) throw new Error('[CDP] Selector broken: "' + SEL.controls.modelClickable + '" — not found in getAvailableModels()');
+
             modelBtn.click();
             await new Promise(r => setTimeout(r, 600));
-            
-            // Find the opened dropdown/dialog
-            let models = [];
-            const allDivs = Array.from(document.querySelectorAll('div'))
-                .filter(d => d.offsetHeight > 50 && d.offsetWidth > 100);
-            
-            // Look for the popover/menu that appeared AFTER clicking
-            for (const div of allDivs) {
-                const style = window.getComputedStyle(div);
-                if (style.position === 'fixed' || style.position === 'absolute') {
-                    const items = Array.from(div.querySelectorAll('*'))
-                        .filter(el => {
-                            const txt = (el.innerText || '').trim();
-                            return el.children.length === 0 && txt.length > 3 && txt.length < 60 &&
-                                   KNOWN.some(k => txt.includes(k));
-                        })
-                        .map(el => el.innerText.trim());
-                    if (items.length > 0) {
-                        models = [...new Set(items)];
-                        break;
-                    }
-                }
+
+            // Find the model dialog that appeared
+            const dialogs = Array.from(controlsRow.querySelectorAll(SEL.dropdowns.dialog))
+                .filter(d => d.offsetWidth > 50 && d.offsetHeight > 50);
+            if (dialogs.length === 0) {
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                throw new Error('[CDP] Selector broken: "' + SEL.dropdowns.dialog + '" — model dialog not found in getAvailableModels()');
             }
-            
-            // Close by pressing Escape
+
+            const dialog = dialogs[dialogs.length - 1]; // Last one = model dialog (second in DOM order)
+            const modelNames = Array.from(dialog.querySelectorAll(SEL.dropdowns.modelOptionName))
+                .map(el => el.textContent.trim())
+                .filter(t => t.length > 3);
+
+            // Close dialog
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-            document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-            // Also try clicking elsewhere
             document.body.click();
             await new Promise(r => setTimeout(r, 200));
-            
-            return { models };
+
+            return { models: [...new Set(modelNames)] };
         } catch(e) { return { models: [], error: e.toString() }; }
     })()`;
 
@@ -243,6 +228,7 @@ export async function getAvailableModels(cdp) {
     return [];
 }
 
+
 /**
  * Inject a message into the Agent Manager chat editor
  */
@@ -251,40 +237,45 @@ export async function injectMessage(cdp, text) {
     const safeText = JSON.stringify(text);
 
     const EXPRESSION = `(async () => {
-        const cancel = document.querySelector('[data-tooltip-id="input-send-button-cancel-tooltip"]');
-        if (cancel && cancel.offsetParent !== null) return { ok:false, reason:"busy" };
+        const SEL = ${JSON.stringify(SELECTORS)};
+        try {
+            const cancel = document.querySelector(SEL.controls.cancelButton);
+            if (cancel && cancel.offsetParent !== null) return { ok:false, reason:"busy" };
 
-        const inputBox = document.getElementById('antigravity.agentSidePanelInputBox');
-        const editor = inputBox?.querySelector('[contenteditable="true"]') || 
-                       document.querySelector('[contenteditable="true"][role="textbox"]');
-        if (!editor) return { ok:false, error:"editor_not_found" };
+            const inputBox = document.querySelector(SEL.controls.inputBox);
+            if (!inputBox) throw new Error('[CDP] Selector broken: "' + SEL.controls.inputBox + '" — not found in injectMessage()');
 
-        const textToInsert = ${safeText};
+            const editor = inputBox.querySelector(SEL.controls.editor);
+            if (!editor) throw new Error('[CDP] Selector broken: "' + SEL.controls.editor + '" — not found in injectMessage()');
 
-        editor.focus();
-        document.execCommand?.("selectAll", false, null);
-        document.execCommand?.("delete", false, null);
+            const textToInsert = ${safeText};
 
-        let inserted = false;
-        try { inserted = !!document.execCommand?.("insertText", false, textToInsert); } catch {}
-        if (!inserted) {
-            editor.textContent = textToInsert;
-            editor.dispatchEvent(new InputEvent("beforeinput", { bubbles:true, inputType:"insertText", data: textToInsert }));
-            editor.dispatchEvent(new InputEvent("input", { bubbles:true, inputType:"insertText", data: textToInsert }));
-        }
+            editor.focus();
+            document.execCommand?.("selectAll", false, null);
+            document.execCommand?.("delete", false, null);
 
-        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+            let inserted = false;
+            try { inserted = !!document.execCommand?.("insertText", false, textToInsert); } catch {}
+            if (!inserted) {
+                editor.textContent = textToInsert;
+                editor.dispatchEvent(new InputEvent("beforeinput", { bubbles:true, inputType:"insertText", data: textToInsert }));
+                editor.dispatchEvent(new InputEvent("input", { bubbles:true, inputType:"insertText", data: textToInsert }));
+            }
 
-        const submit = document.querySelector("svg.lucide-arrow-right")?.closest("button");
-        if (submit && !submit.disabled) {
-            submit.click();
-            return { ok:true, method:"click_submit" };
-        }
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-        editor.dispatchEvent(new KeyboardEvent("keydown", { bubbles:true, key:"Enter", code:"Enter" }));
-        editor.dispatchEvent(new KeyboardEvent("keyup", { bubbles:true, key:"Enter", code:"Enter" }));
-        
-        return { ok:true, method:"enter_keypress" };
+            const submitIcon = document.querySelector(SEL.controls.submitButton);
+            const submit = submitIcon?.closest("button");
+            if (submit && !submit.disabled) {
+                submit.click();
+                return { ok:true, method:"click_submit" };
+            }
+
+            editor.dispatchEvent(new KeyboardEvent("keydown", { bubbles:true, key:"Enter", code:"Enter" }));
+            editor.dispatchEvent(new KeyboardEvent("keyup", { bubbles:true, key:"Enter", code:"Enter" }));
+
+            return { ok:true, method:"enter_keypress" };
+        } catch(e) { return { ok:false, error: e.toString() }; }
     })()`;
 
     for (const ctx of cdp.contexts) {
@@ -307,17 +298,15 @@ export async function injectMessage(cdp, text) {
 export async function stopGeneration(cdp) {
     if (!cdp) return { error: 'Not connected' };
     const EXP = `(async () => {
-        const cancel = document.querySelector('[data-tooltip-id="input-send-button-cancel-tooltip"]');
-        if (cancel && cancel.offsetParent !== null) {
-            cancel.click();
-            return { success: true };
-        }
-        const stopBtn = document.querySelector('button svg.lucide-square')?.closest('button');
-        if (stopBtn && stopBtn.offsetParent !== null) {
-            stopBtn.click();
-            return { success: true, method: 'fallback_square' };
-        }
-        return { error: 'No active generation found' };
+        const SEL = ${JSON.stringify(SELECTORS)};
+        try {
+            const cancel = document.querySelector(SEL.controls.cancelButton);
+            if (cancel && cancel.offsetParent !== null) {
+                cancel.click();
+                return { success: true };
+            }
+            return { error: 'No active generation found' };
+        } catch(e) { return { error: e.toString() }; }
     })()`;
 
     for (const ctx of cdp.contexts) {
@@ -347,7 +336,7 @@ export async function remoteScroll(cdp, deltaY) {
                 .filter(el => el.scrollHeight > 100 && el.offsetWidth > 200)
                 .sort((a,b) => b.scrollHeight - a.scrollHeight)[0];
                 
-            if (!chatScroll) return { error: 'No scroll container found' };
+            if (!chatScroll) throw new Error('[CDP] Selector broken: "' + SEL.chat.scrollContainer + '" — not found in remoteScroll()');
             
             chatScroll.scrollBy({ top: ${deltaY}, behavior: 'smooth' });
             
@@ -380,32 +369,41 @@ export async function setMode(cdp, modeText) {
     if (!cdp) return { error: 'Not connected' };
     if (!['Fast', 'Planning'].includes(modeText)) return { error: 'Invalid mode' };
     const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
         try {
             const mode = ${JSON.stringify(modeText)};
-            const allEls = Array.from(document.querySelectorAll('*'));
-            const candidates = allEls.filter(el => el.children.length === 0 && (el.textContent.trim() === 'Fast' || el.textContent.trim() === 'Planning'));
-            let modeBtn = null;
-            for (const el of candidates) {
-                let current = el;
-                for (let i = 0; i < 4; i++) {
-                    if (!current) break;
-                    if (window.getComputedStyle(current).cursor === 'pointer' || current.tagName === 'BUTTON') {
-                        modeBtn = current; break;
-                    }
-                    current = current.parentElement;
-                }
-                if (modeBtn) break;
-            }
-            if (!modeBtn) return { error: 'Button not found' };
-            if (modeBtn.innerText.includes(mode)) return { success: true, alreadySet: true };
+            const inputBox = document.querySelector(SEL.controls.inputBox);
+            if (!inputBox) throw new Error('[CDP] Selector broken: "' + SEL.controls.inputBox + '" — not found in setMode()');
+
+            const controlsRow = inputBox.querySelector(SEL.controls.controlsRow);
+            if (!controlsRow) throw new Error('[CDP] Selector broken: "' + SEL.controls.controlsRow + '" — not found in setMode()');
+
+            // Read current mode from the mode button label
+            const modeBtn = controlsRow.querySelector(SEL.controls.modeButton);
+            if (!modeBtn) throw new Error('[CDP] Selector broken: "' + SEL.controls.modeButton + '" — not found in setMode()');
+
+            const currentMode = (modeBtn.innerText || '').trim();
+            if (currentMode === mode) return { success: true, alreadySet: true };
+
+            // Click mode button to open dialog
             modeBtn.click();
-            await new Promise(r => setTimeout(r, 600));
-            let dialog = Array.from(document.querySelectorAll('[role="dialog"], [data-radix-popper-content-wrapper], div'))
-                .find(d => d.offsetHeight > 0 && d.innerText.includes(mode) && !d.innerText.includes('Files'));
-            if (!dialog) return { error: 'Dialog not found' };
-            const target = Array.from(dialog.querySelectorAll('*')).find(el => el.children.length === 0 && el.textContent.trim() === mode);
-            if (target) { target.click(); return { success: true }; }
-            return { error: 'Option not found' };
+            await new Promise(r => setTimeout(r, 400));
+
+            // Find the mode dialog
+            const dialogs = Array.from(controlsRow.querySelectorAll(SEL.dropdowns.dialog))
+                .filter(d => d.offsetWidth > 50 && d.offsetHeight > 20);
+            if (dialogs.length === 0) throw new Error('[CDP] Selector broken: "' + SEL.dropdowns.dialog + '" — mode dialog not found in setMode()');
+
+            const dialog = dialogs[0]; // First dialog = mode picker
+            const options = Array.from(dialog.querySelectorAll(SEL.dropdowns.modeOption));
+            const target = options.find(el => (el.textContent || '').trim() === mode);
+            if (!target) {
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                throw new Error('[CDP] Mode option "' + mode + '" not found in dialog — check SEL.dropdowns.modeOption');
+            }
+
+            target.click();
+            return { success: true };
         } catch(err) { return { error: err.toString() }; }
     })()`;
 
@@ -429,36 +427,45 @@ export async function setMode(cdp, modeText) {
 export async function setModel(cdp, modelText) {
     if (!cdp) return { error: 'Not connected' };
     const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
         try {
             const model = ${JSON.stringify(modelText)};
-            const KNOWN_KEYWORDS = ["Gemini", "Claude", "GPT", "Model"];
-            let modelBtn = document.querySelector('[data-tooltip-id*="model"], [data-tooltip-id*="provider"]');
-            if (!modelBtn) {
-                const candidates = Array.from(document.querySelectorAll('button, [role="button"], div, span'))
-                    .filter(el => KNOWN_KEYWORDS.some(k => (el.innerText||'').includes(k)) && el.offsetParent !== null);
-                modelBtn = candidates.find(el => {
-                    const s = window.getComputedStyle(el);
-                    return (s.cursor === 'pointer' || el.tagName === 'BUTTON') && el.querySelector('svg');
-                }) || candidates[0];
-            }
-            if (!modelBtn) return { error: 'Selector not found' };
+            const inputBox = document.querySelector(SEL.controls.inputBox);
+            if (!inputBox) throw new Error('[CDP] Selector broken: "' + SEL.controls.inputBox + '" — not found in setModel()');
+
+            const controlsRow = inputBox.querySelector(SEL.controls.controlsRow);
+            if (!controlsRow) throw new Error('[CDP] Selector broken: "' + SEL.controls.controlsRow + '" — not found in setModel()');
+
+            const modelBtn = controlsRow.querySelector(SEL.controls.modelClickable);
+            if (!modelBtn) throw new Error('[CDP] Selector broken: "' + SEL.controls.modelClickable + '" — not found in setModel()');
+
             modelBtn.click();
             await new Promise(r => setTimeout(r, 600));
-            let dialog = Array.from(document.querySelectorAll('[role="dialog"], [role="listbox"], [role="menu"], [data-radix-popper-content-wrapper], div'))
-                .find(d => d.offsetHeight > 0 && d.innerText?.includes(model) && !d.innerText?.includes('Files'));
-            if (!dialog) return { error: 'Menu not found' };
-            const options = Array.from(dialog.querySelectorAll('*')).filter(el => el.children.length === 0 && el.textContent?.trim().length > 0);
-            let target = options.find(el => el.textContent.trim() === model) || options.find(el => el.textContent.includes(model));
+
+            // Find the model dialog (last dialog in controls row)
+            const dialogs = Array.from(controlsRow.querySelectorAll(SEL.dropdowns.dialog))
+                .filter(d => d.offsetWidth > 50 && d.offsetHeight > 50);
+            if (dialogs.length === 0) {
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                throw new Error('[CDP] Selector broken: "' + SEL.dropdowns.dialog + '" — model dialog not found in setModel()');
+            }
+
+            const dialog = dialogs[dialogs.length - 1]; // Last one = model dialog
+            const modelNames = Array.from(dialog.querySelectorAll(SEL.dropdowns.modelOptionName));
+            const target = modelNames.find(el => (el.textContent || '').trim() === model)
+                        || modelNames.find(el => (el.textContent || '').includes(model));
+
             if (!target) {
-                const partials = options.filter(el => model.includes(el.textContent.trim())).sort((a,b) => b.textContent.length - a.textContent.length);
-                target = partials[0];
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                const available = modelNames.map(el => el.textContent.trim()).join(', ');
+                return { error: 'Model "' + model + '" not found. Available: ' + available };
             }
-            if (target) {
-                target.scrollIntoView({block: 'center'});
-                target.click();
-                return { success: true };
-            }
-            return { error: 'Model not found in list' };
+
+            // Click the row containing this model name
+            const row = target.closest(SEL.dropdowns.modelOptionRow) || target;
+            row.scrollIntoView({block: 'center'});
+            row.click();
+            return { success: true };
         } catch(err) { return { error: err.toString() }; }
     })()`;
 
@@ -481,10 +488,9 @@ export async function setModel(cdp, modelText) {
  */
 export async function startNewChat(cdp) {
     if (!cdp) return { error: 'Not connected' };
-    
+
     // Strategy 1: Use CDP keyboard shortcut Ctrl+Shift+L (native Gemini new chat shortcut)
     try {
-        // Press Ctrl+Shift+L
         await cdp.call("Input.dispatchKeyEvent", {
             type: "keyDown",
             modifiers: 3, // Ctrl(1) + Shift(2) = 3
@@ -501,16 +507,16 @@ export async function startNewChat(cdp) {
             windowsVirtualKeyCode: 76,
             nativeVirtualKeyCode: 76
         });
-        
-        // Brief delay then check if it worked
+
         await new Promise(r => setTimeout(r, 500));
         return { success: true, method: 'keyboard_ctrl_shift_l' };
     } catch (e) {
         console.log('⚠️ Keyboard shortcut failed:', e.message);
     }
 
-    // Strategy 2: DOM click with proper event dispatching
+    // Strategy 2: DOM click using strict selectors
     const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
         try {
             function simulateClick(el) {
                 const rect = el.getBoundingClientRect();
@@ -520,24 +526,21 @@ export async function startNewChat(cdp) {
                     el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }));
                 });
             }
-            
-            // Try button with title="Edit"
-            const editBtn = document.querySelector('button[title="Edit"]');
-            if (editBtn && editBtn.offsetParent !== null) { simulateClick(editBtn); return { success: true, method: 'simulated_click_edit' }; }
-            
-            // Try google-symbols "edit" icon
-            const allBtns = Array.from(document.querySelectorAll('button')).filter(b => b.offsetParent !== null);
-            const editIconBtn = allBtns.find(b => {
-                const icon = b.querySelector('.google-symbols');
-                return icon && icon.textContent.trim() === 'edit';
+
+            // Try sidebar nav button with "add" icon (Start new conversation)
+            const navBtns = Array.from(document.querySelectorAll(SEL.sidebarNav.navButton))
+                .filter(d => d.offsetParent !== null);
+            const newChatBtn = navBtns.find(btn => {
+                const icon = btn.querySelector(SEL.sidebarNav.googleSymbol);
+                return icon && icon.textContent.trim() === SEL.sidebarNav.newChatIcon;
             });
-            if (editIconBtn) { simulateClick(editIconBtn); return { success: true, method: 'simulated_click_google_edit' }; }
-            
-            // Try data-tooltip-id
-            const exactBtn = document.querySelector('[data-tooltip-id="new-conversation-tooltip"]');
-            if (exactBtn) { simulateClick(exactBtn); return { success: true, method: 'simulated_click_tooltip' }; }
-            
-            return { error: 'New chat button not found' };
+            if (newChatBtn) { simulateClick(newChatBtn); return { success: true, method: 'sidebar_new_chat' }; }
+
+            // Try button with title="Edit"
+            const editBtn = document.querySelector(SEL.sidebarNav.editButton);
+            if (editBtn && editBtn.offsetParent !== null) { simulateClick(editBtn); return { success: true, method: 'edit_button' }; }
+
+            throw new Error('[CDP] New chat button not found — update SEL.sidebarNav selectors');
         } catch(e) { return { error: e.toString() }; }
     })()`;
 
@@ -556,52 +559,40 @@ export async function startNewChat(cdp) {
 }
 
 /**
- * Get current App state
+ * Get current App state (mode, model, workspace)
  */
 export async function getAppState(cdp) {
     if (!cdp) return { mode: 'Unknown', model: 'Unknown' };
     const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
         try {
             const state = { mode: 'Unknown', model: 'Unknown' };
-            const all = Array.from(document.querySelectorAll('*'));
-            for (const el of all) {
-                if (el.children.length > 0) continue;
-                const txt = (el.innerText || '').trim();
-                if (txt !== 'Fast' && txt !== 'Planning') continue;
-                let cur = el;
-                for (let i=0; i<5; i++) {
-                    if (!cur) break;
-                    if (window.getComputedStyle(cur).cursor === 'pointer' || cur.tagName === 'BUTTON') { state.mode = txt; break; }
-                    cur = cur.parentElement;
-                }
-                if (state.mode !== 'Unknown') break;
+            const inputBox = document.querySelector(SEL.controls.inputBox);
+            if (!inputBox) throw new Error('[CDP] Selector broken: "' + SEL.controls.inputBox + '" — not found in getAppState()');
+
+            const controlsRow = inputBox.querySelector(SEL.controls.controlsRow);
+            if (!controlsRow) throw new Error('[CDP] Selector broken: "' + SEL.controls.controlsRow + '" — not found in getAppState()');
+
+            // Read mode from the mode button
+            const modeBtn = controlsRow.querySelector(SEL.controls.modeButton);
+            if (modeBtn) {
+                const modeLabel = modeBtn.querySelector(SEL.state.modeLabel);
+                state.mode = modeLabel ? modeLabel.textContent.trim() : (modeBtn.innerText || '').trim();
             }
-            const KNOWN = ["Gemini", "Claude", "GPT"];
-            const nodes = all.filter(el => el.children.length === 0 && el.innerText);
-            let modelEl = nodes.find(el => {
-                if (!KNOWN.some(k => el.innerText.includes(k))) return false;
-                let p = el;
-                for (let i=0; i<8; i++) {
-                    if (!p) break;
-                    if (p.tagName === 'BUTTON' || window.getComputedStyle(p).cursor === 'pointer') return true;
-                    p = p.parentElement;
-                }
-                return false;
-            }) || nodes.find(el => KNOWN.some(k => el.innerText.includes(k)) && el.innerText.length < 60);
-            if (modelEl) state.model = modelEl.innerText.trim();
-            
-            // Find current workspace name from sidebar
-            const wsSection = Array.from(document.querySelectorAll('button'))
-                .find(b => (b.innerText || '').includes('keyboard_arrow_down'));
-            if (wsSection) {
-                const name = (wsSection.innerText || '')
-                    .replace(/keyboard_arrow_(down|right)/g, '')
-                    .replace(/more_vert/g, '')
-                    .replace(/add/g, '')
-                    .trim();
-                if (name) state.workspace = name;
-            }
-            
+
+            // Read model from the model label
+            const modelLabel = controlsRow.querySelector(SEL.controls.modelLabel);
+            if (modelLabel) state.model = modelLabel.textContent.trim();
+
+            // Read workspace from the sidebar section headers
+            const wsHeaders = Array.from(document.querySelectorAll(SEL.state.workspaceHeader));
+            const activeWs = wsHeaders.find(h => {
+                // The active workspace has conversation pills under it
+                const section = h.closest('.flex.flex-col');
+                return section && section.querySelector('[data-testid^="convo-pill-"]');
+            });
+            if (activeWs) state.workspace = activeWs.textContent.trim();
+
             return state;
         } catch(e) { return { error: e.toString() }; }
     })()`;
@@ -616,14 +607,18 @@ export async function getAppState(cdp) {
 }
 
 /**
- * Check if chat is open
+ * Check if chat is open by looking for the input box and chat scroll area
  */
 export async function hasChatOpen(cdp) {
     if (!cdp) return { hasChat: false, hasMessages: false, editorFound: false };
     const EXP = `(() => {
-        const c = document.getElementById('conversation') || document.getElementById('chat') || document.getElementById('cascade');
-        const m = c && c.querySelectorAll('[class*="message"], [data-message]').length > 0;
-        return { hasChat: !!c, hasMessages: !!m, editorFound: !!(c && c.querySelector('[data-lexical-editor="true"]')) };
+        const SEL = ${JSON.stringify(SELECTORS)};
+        const inputBox = document.querySelector(SEL.controls.inputBox);
+        const editor = inputBox ? inputBox.querySelector(SEL.controls.editor) : null;
+        const chatScroll = Array.from(document.querySelectorAll(SEL.chat.scrollContainer))
+            .find(el => el.scrollHeight > 100 && el.offsetWidth > 200);
+        const hasMessages = chatScroll ? chatScroll.scrollHeight > 300 : false;
+        return { hasChat: !!inputBox, hasMessages, editorFound: !!editor };
     })()`;
 
     for (const ctx of cdp.contexts) {
@@ -636,31 +631,23 @@ export async function hasChatOpen(cdp) {
 }
 
 /**
- * Click a remote element by selector/index/textContent
+ * Click a remote element by CSS selector and index
+ * Note: This function accepts the selector from the caller (used by /remote-click route).
+ * No innerText filtering — only CSS selector targeting.
  */
-export async function clickElement(cdp, { selector, index, textContent }) {
+export async function clickElement(cdp, { selector, index }) {
     if (!cdp) return { error: 'Not connected' };
-    const safeText = JSON.stringify(textContent || '');
+    const safeSelector = JSON.stringify(selector);
     const EXP = `(async () => {
         try {
-            const root = document.getElementById('conversation') || document.getElementById('chat') || document.getElementById('cascade') || document;
-            let elements = Array.from(root.querySelectorAll('${selector}'));
-            const filterText = ${safeText};
-            if (filterText) {
-                elements = elements.filter(el => {
-                    const txt = (el.innerText || el.textContent || '').trim();
-                    const firstLine = txt.split('\\\\n')[0].trim();
-                    return firstLine === filterText || txt.includes(filterText);
-                });
-                elements = elements.filter(el => !elements.some(other => other !== el && el.contains(other)));
-            }
-            const target = elements[${index}];
-            if (target) {
-                if (target.focus) target.focus();
-                target.click();
-                return { success: true, found: elements.length, indexUsed: ${index} };
-            }
-            return { error: 'Element not found' };
+            const sel = ${safeSelector};
+            const elements = Array.from(document.querySelectorAll(sel)).filter(el => el.offsetParent !== null);
+            if (elements.length === 0) throw new Error('[CDP] Selector "' + sel + '" returned 0 visible elements in clickElement()');
+            const target = elements[${index || 0}];
+            if (!target) throw new Error('[CDP] Element at index ${index || 0} not found for selector "' + sel + '" (' + elements.length + ' total)');
+            target.focus?.();
+            target.click();
+            return { success: true, found: elements.length, indexUsed: ${index || 0} };
         } catch(e) { return { error: e.toString() }; }
     })()`;
 
@@ -685,49 +672,50 @@ export async function getChatHistory(cdp) {
     if (!cdp) throw new Error("Agent Manager not connected");
 
     const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
         try {
-            let pills = document.querySelectorAll('[data-testid^="convo-pill-"]');
-            
-            // Si la sidebar n'est pas ouverte, on essaie de cliquer sur le bouton
-            if (pills.length === 0) {
-                const buttons = Array.from(document.querySelectorAll('[role="button"], button'));
-                const historyBtn = buttons.find(btn => {
-                    const icon = btn.querySelector('.google-symbols');
-                    return icon && icon.textContent.trim() === 'history';
-                });
+            let pills = document.querySelectorAll(SEL.history.conversationPill);
 
-                if (historyBtn) {
-                    historyBtn.click();
-                    await new Promise(r => setTimeout(r, 1500));
-                    pills = document.querySelectorAll('[data-testid^="convo-pill-"]');
-                }
+            // If sidebar not open, click the history button
+            if (pills.length === 0) {
+                const navBtns = Array.from(document.querySelectorAll(SEL.sidebarNav.navButton))
+                    .filter(d => d.offsetParent !== null);
+                const historyBtn = navBtns.find(btn => {
+                    const icon = btn.querySelector(SEL.sidebarNav.googleSymbol);
+                    return icon && icon.textContent.trim() === SEL.sidebarNav.historyIcon;
+                });
+                if (!historyBtn) throw new Error('[CDP] Selector broken: history button not found — check SEL.sidebarNav');
+
+                historyBtn.click();
+                await new Promise(r => setTimeout(r, 1500));
+                pills = document.querySelectorAll(SEL.history.conversationPill);
             }
 
             const chats = [];
-            
+
             pills.forEach(pill => {
                 const title = pill.textContent?.trim() || '';
                 const id = pill.getAttribute('data-testid')?.replace('convo-pill-', '') || '';
                 const container = pill.closest('button');
                 let time = '';
                 let isActive = false;
-                
+
                 if (container) {
-                    const timeSpans = Array.from(container.querySelectorAll('span.text-xs'));
+                    const timeSpans = Array.from(container.querySelectorAll(SEL.history.timeLabel));
                     const timeSpan = timeSpans.find(s => {
                         const t = s.textContent?.trim();
-                        return t && (t === 'now' || /\\\\d+[mhdw]/.test(t));
+                        return t && (t === 'now' || /\\d+[mhdw]/.test(t));
                     });
                     if (timeSpan) time = timeSpan.textContent.trim();
-                    container.querySelectorAll('.google-symbols').forEach(icon => {
+                    container.querySelectorAll(SEL.history.activeSpinner).forEach(icon => {
                         if (icon.textContent?.trim() === 'progress_activity') isActive = true;
                     });
                 }
-                
+
                 let workspace = 'Other';
-                const section = pill.closest('.flex.flex-col.gap-px');
+                const section = pill.closest(SEL.history.sectionContainer);
                 if (section) {
-                    const header = section.querySelector('span.text-sm.font-medium');
+                    const header = section.querySelector(SEL.history.sectionHeader);
                     if (header) workspace = header.textContent.trim();
                 }
 
@@ -757,62 +745,43 @@ export async function getChatHistory(cdp) {
 }
 
 /**
- * List workspaces/projects from Agent Manager
+ * List workspaces/projects from Agent Manager sidebar
  */
 export async function listProjects(cdp) {
     if (!cdp) throw new Error("Agent Manager not connected");
 
     const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
         try {
-            const projects = [];
-            
-            // Find the "+" button next to "Workspace"
-            // Strategy: Find all buttons, check if they either contain 'add' or 'plus' 
-            // AND are near the text 'Workspace', or just find the 'Workspace' header and navigate to the '+' button
-            const allSpans = Array.from(document.querySelectorAll('span'));
-            const workspaceSpan = allSpans.find(s => s.innerText?.trim() === 'Workspaces' || s.innerText?.trim() === 'Workspace');
-            
-            let wsBtn = null;
-            if (workspaceSpan) {
-                // The '+' button is usually a sibling or close parent's child
-                // Traverse up slightly and find a button containing 'add' or a plus icon
-                const container = workspaceSpan.closest('div.flex');
-                if (container) {
-                    wsBtn = container.querySelector('button');
-                }
-            }
-            
-            // Fallback: click the first button containing 'add' icon in the sidebar
-            if (!wsBtn) {
-                wsBtn = Array.from(document.querySelectorAll('button')).find(b => (b.innerText || '').includes('add'));
-            }
-            
-            if (wsBtn) {
-                // Click to open the dropdown/modal
-                wsBtn.click();
-                await new Promise(r => setTimeout(r, 600));
-                
-                // Read from modal. The modal usually creates a floating portal or a list at the end of body
-                const menuItems = document.querySelectorAll('div.px-2\\\\.5.cursor-pointer, [role="menuitem"], .monaco-list-row');
-                if (menuItems.length > 0) {
-                    menuItems.forEach((item, index) => {
-                        const nameSpan = item.querySelector('span.text-sm > span') || item.querySelector('.monaco-highlighted-label') || item;
-                        let name = (nameSpan.innerText || '').trim();
-                        // Ignore UI control text
-                        if (name && name !== 'Open Workspace' && !name.includes('keyboard_arrow') && name.length > 1) {
-                            // Ensure unique
-                            if (!projects.some(p => p.name === name)) {
-                                projects.push({ name, path: 'Workspace ' + (index + 1), index });
-                            }
-                        }
-                    });
-                }
-                
-                // Click document body or Esc to close modal
+            // Open workspace dialog using the known button
+            const btn = document.querySelector(SEL.sidebar.openWorkspaceButton);
+            if (!btn) throw new Error('[CDP] Selector broken: "' + SEL.sidebar.openWorkspaceButton + '" — not found in listProjects()');
+
+            btn.click();
+            await new Promise(r => setTimeout(r, 600));
+
+            // Read workspace items from the dropdown
+            const items = Array.from(document.querySelectorAll(SEL.sidebar.workspaceListItems));
+            if (items.length === 0) {
                 document.body.click();
                 document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+                throw new Error('[CDP] Selector broken: "' + SEL.sidebar.workspaceListItems + '" — dropdown empty in listProjects()');
             }
-            
+
+            const projects = [];
+            items.forEach((item, index) => {
+                const nameNode = item.querySelector(SEL.sidebar.workspaceItemName);
+                const name = nameNode ? nameNode.innerText.trim() : '';
+                if (name && name.length > 1 && !projects.some(p => p.name === name)) {
+                    const pathNode = item.querySelector(SEL.sidebar.workspaceItemPath);
+                    projects.push({ name, path: pathNode ? pathNode.innerText.trim() : 'Workspace ' + (index + 1), index });
+                }
+            });
+
+            // Close dropdown
+            document.body.click();
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
             return { success: true, projects };
         } catch (err) { return { error: err.toString() }; }
     })()`;
@@ -839,36 +808,37 @@ export async function openProject(cdp, { index, name }) {
 
     const projectName = name;
     const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
         try {
-            const targetName = "${projectName.replace(/"/g, '\\"')}";
-            
-            // 1. Ouvrir le menu Workspace
-            const btn = document.querySelector('${SEL.sidebar.openWorkspaceButton}');
-            if (!btn) throw new Error('[CDP] Selector broken: "${SEL.sidebar.openWorkspaceButton}" — element not found in openProject(). Update src/config/selectors.js');
-            
+            const targetName = ${JSON.stringify(projectName)};
+
+            // 1. Open the Workspace menu
+            const btn = document.querySelector(SEL.sidebar.openWorkspaceButton);
+            if (!btn) throw new Error('[CDP] Selector broken: "' + SEL.sidebar.openWorkspaceButton + '" — not found in openProject()');
+
             btn.click();
-            await new Promise(r => setTimeout(r, 600)); // Attendre l'animation
-            
-            // 2. Chercher l'élément correspondant
-            const items = Array.from(document.querySelectorAll('${SEL.sidebar.workspaceListItems}'));
+            await new Promise(r => setTimeout(r, 600));
+
+            // 2. Find the matching item
+            const items = Array.from(document.querySelectorAll(SEL.sidebar.workspaceListItems));
             if (items.length === 0) {
                  document.body.click();
-                 throw new Error('[CDP] Selector broken: "${SEL.sidebar.workspaceListItems}". Menu empty in openProject().');
+                 throw new Error('[CDP] Selector broken: "' + SEL.sidebar.workspaceListItems + '" — menu empty in openProject()');
             }
-            
+
             const targetItem = items.find(el => {
-                const nameNode = el.querySelector('${SEL.sidebar.workspaceItemName}');
+                const nameNode = el.querySelector(SEL.sidebar.workspaceItemName);
                 return nameNode && nameNode.innerText.trim() === targetName;
             });
-            
+
             if (!targetItem) {
                 document.body.click();
                 return { success: false, error: "Project '"+targetName+"' not found in dropdown list." };
             }
-            
-            // 3. Cliquer sur le projet
+
+            // 3. Click the project
             targetItem.click();
-            
+
             return { success: true, message: "Opening project..." };
         } catch (error) {
             return { success: false, error: error.toString() };
@@ -895,38 +865,40 @@ export async function openProject(cdp, { index, name }) {
 export async function selectChat(cdp, chatTitle) {
     if (!cdp) throw new Error("Agent Manager not connected");
     const safeChatTitle = JSON.stringify(chatTitle);
-    
+
     const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
         try {
             const targetTitle = ${safeChatTitle};
-            
-            // First ensure history panel is open
-            const buttons = Array.from(document.querySelectorAll('[role="button"], button'));
-            const historyBtn = buttons.find(btn => {
-                const icon = btn.querySelector('.google-symbols');
-                return icon && icon.textContent.trim() === 'history';
+
+            // Ensure history panel is open
+            const navBtns = Array.from(document.querySelectorAll(SEL.sidebarNav.navButton))
+                .filter(d => d.offsetParent !== null);
+            const historyBtn = navBtns.find(btn => {
+                const icon = btn.querySelector(SEL.sidebarNav.googleSymbol);
+                return icon && icon.textContent.trim() === SEL.sidebarNav.historyIcon;
             });
             if (historyBtn) {
                 historyBtn.click();
                 await new Promise(r => setTimeout(r, 800));
             }
 
-            const pills = document.querySelectorAll('[data-testid^="convo-pill-"]');
+            const pills = document.querySelectorAll(SEL.history.conversationPill);
             let targetPill = null;
-            
+
             for (const pill of pills) {
                 if (pill.textContent?.trim() === targetTitle) {
                     targetPill = pill;
                     break;
                 }
             }
-            
+
             if (targetPill) {
                 targetPill.click();
                 return { success: true };
             }
-            
-            return { error: 'Chat not found' };
+
+            return { error: 'Chat "' + targetTitle + '" not found in ' + pills.length + ' pills' };
         } catch (e) { return { error: e.toString() }; }
     })()`;
 
@@ -943,4 +915,3 @@ export async function selectChat(cdp, chatTitle) {
     }
     return { error: 'Context failed' };
 }
-

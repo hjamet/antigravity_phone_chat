@@ -4,7 +4,7 @@ export const SELECTORS = {
     },
     sidebar: {
         openWorkspaceButton: '[aria-label="Open Workspace"]',
-        workspaceListItems: '.text-quickinput-foreground', // Les \`div\` cliquables des projets
+        workspaceListItems: '.text-quickinput-foreground', // Les `div` cliquables des projets
         workspaceItemName: 'span.text-sm.truncate',        // Le span contenant le nom du projet
         workspaceItemPath: 'span.text-xs.opacity-50'       // Le span contenant le chemin local/remote
     },
@@ -30,5 +30,50 @@ export const SELECTORS = {
         progressScrollable: '.overflow-y-auto.overflow-x-hidden',
         statusHeader: '.sticky.top-0 .flex.items-center.gap-2.font-medium.pb-2', // TaskStatus container
         statusText: '.leading-relaxed'                                 // TaskStatus text inside header
+    },
+
+    // ---- Control elements (input area below chat) ----
+    controls: {
+        inputBox: '#antigravity\\.agentSidePanelInputBox',
+        editor: '[contenteditable="true"][role="textbox"]',
+        controlsRow: '.mt-1.flex.w-full.items-center.justify-between',           // Row holding mode/model buttons
+        modeButton: 'button.py-1.pl-1.pr-2.flex.items-center',                   // Mode toggle (Fast/Planning)
+        modelClickable: '.flex.min-w-0.max-w-full.cursor-pointer.items-center',   // Model name clickable div
+        modelLabel: 'span.select-none.overflow-hidden.text-ellipsis.text-xs',     // Model name text span
+        cancelButton: '[data-tooltip-id="input-send-button-cancel-tooltip"]',     // Cancel active generation
+        submitButton: 'svg.lucide-arrow-right',                                   // Submit arrow icon (inside button)
+        audioButton: '[data-tooltip-id="audio-tooltip"]',                         // Mic button
+    },
+
+    // ---- Dropdowns / popover dialogs (mode & model pickers) ----
+    dropdowns: {
+        dialog: '[role="dialog"]',                                                // Popover container (mode or model)
+        modeOption: '.font-medium',                                               // Mode option label (Fast/Planning)
+        modelOptionRow: '.px-2.py-1.flex.items-center',                           // Model option row
+        modelOptionName: 'span.text-xs.font-medium',                              // Model name in dropdown
+    },
+
+    // ---- Sidebar navigation buttons ----
+    sidebarNav: {
+        navButton: 'div[role="button"]',                                          // Generic nav button in sidebar
+        googleSymbol: '.google-symbols',                                          // Icon inside nav buttons
+        newChatIcon: 'add',                                                       // google-symbols text for new chat
+        historyIcon: 'history',                                                   // google-symbols text for history
+        editButton: 'button[title="Edit"]',                                       // New chat alt (edit icon)
+    },
+
+    // ---- Chat history sidebar ----
+    history: {
+        conversationPill: '[data-testid^="convo-pill-"]',                         // Conversation entry pill
+        timeLabel: 'span.text-xs',                                                // Relative time label
+        sectionContainer: '.flex.flex-col.gap-px',                                // Section grouping conversations
+        sectionHeader: 'span.text-sm.font-medium.flex-shrink-0.truncate',         // Workspace name header
+        activeSpinner: '.google-symbols',                                         // Active spinner icon container
+    },
+
+    // ---- State reading (mode/model/workspace) ----
+    state: {
+        modeLabel: 'span.text-xs.select-none',                                   // Mode text inside mode button
+        workspaceHeader: 'span.text-sm.font-medium.flex-shrink-0.truncate',       // Workspace section name
     }
 };

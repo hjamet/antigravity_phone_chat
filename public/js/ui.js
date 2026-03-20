@@ -34,7 +34,23 @@ export function renderChatState(state) {
     const container = elements.chatContent;
     if (!container) return;
     
-    const messages = state.messages || [];
+    let messages = [...(state.messages || [])];
+    
+    const pendingMsg = localStorage.getItem('pendingUserMessage');
+    if (pendingMsg) {
+        const serverUserMsgs = messages.filter(m => m.role === 'user');
+        const lastServerUserMsg = serverUserMsgs.length > 0 ? serverUserMsgs[serverUserMsgs.length - 1] : null;
+        
+        if (lastServerUserMsg && lastServerUserMsg.content.trim() === pendingMsg.trim()) {
+            localStorage.removeItem('pendingUserMessage');
+        } else {
+            messages.push({ 
+                role: 'user', 
+                type: 'message', 
+                content: window.isAgentStreaming ? `${pendingMsg} ⏳` : pendingMsg 
+            });
+        }
+    }
     
     // Check if user is near the bottom before update
     const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
@@ -84,6 +100,7 @@ export function renderChatState(state) {
 
     // Streaming indicator
     updateStreamingIndicator(state.isStreaming);
+    window.isAgentStreaming = state.isStreaming;
 
     // Only auto-scroll if something changed AND user was near the bottom
     if (anyChanged && isNearBottom) {

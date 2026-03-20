@@ -36,13 +36,19 @@ export function renderChatState(state) {
     
     let messages = [...(state.messages || [])];
     
-    const pendingMsg = localStorage.getItem('pendingUserMessage');
+    const pendingMsg = window.pendingUserMessage;
     if (pendingMsg) {
         const serverUserMsgs = messages.filter(m => m.role === 'user');
         const lastServerUserMsg = serverUserMsgs.length > 0 ? serverUserMsgs[serverUserMsgs.length - 1] : null;
-        
-        if (lastServerUserMsg && lastServerUserMsg.content.trim() === pendingMsg.trim()) {
-            localStorage.removeItem('pendingUserMessage');
+
+        const strMatch = (a, b) => {
+            const cleanA = (a || '').replace(/\\s+/g, '').toLowerCase();
+            const cleanB = (b || '').replace(/\\s+/g, '').toLowerCase();
+            return cleanA && cleanB && (cleanA.includes(cleanB.substring(0, 15)) || cleanB.includes(cleanA.substring(0, 15)));
+        };
+
+        if (lastServerUserMsg && strMatch(lastServerUserMsg.content, pendingMsg)) {
+            window.pendingUserMessage = undefined;
         } else {
             messages.push({ 
                 role: 'user', 

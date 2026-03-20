@@ -105,6 +105,11 @@ async function init() {
         }
     });
 
+    elements.chatInput?.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 150) + 'px'; // Max height limit 150px
+    });
+
     elements.stopBtn?.addEventListener('click', stopGeneration);
 
     document.getElementById('newChatBtn')?.addEventListener('click', async () => {

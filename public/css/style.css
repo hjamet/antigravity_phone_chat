@@ -357,6 +357,7 @@ body {
 /* ===== Chat Messages (Phase 5 Native Rendering) ===== */
 .chat-msg {
     max-width: 100%;
+    min-width: 0;
 }
 
 /* One-time fade-in for NEW messages only — removed after animationend by JS */
@@ -401,6 +402,7 @@ body {
     align-self: center;
     width: 95%;
     max-width: 600px;
+    min-width: 0;
     background: rgba(30, 30, 46, 0.6);
     border: 1px solid rgba(88, 86, 214, 0.3);
     border-left: 4px solid var(--accent-light);
@@ -428,7 +430,16 @@ body {
     background: rgba(0, 0, 0, 0.15);
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.04);
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    overflow-x: auto;
 }
+
+.task-paragraph pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 
 .task-steps {
     display: flex;

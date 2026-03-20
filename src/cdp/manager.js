@@ -240,9 +240,6 @@ export async function injectMessage(cdp, text) {
     const EXPRESSION = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
-            const cancel = document.querySelector(SEL.controls.cancelButton);
-            if (cancel && cancel.offsetParent !== null) return { ok:false, reason:"busy" };
-
             const inputBox = document.querySelector(SEL.controls.inputBox);
             if (!inputBox) throw new Error('[CDP] Selector broken: "' + SEL.controls.inputBox + '" — not found in injectMessage()');
 
@@ -255,23 +252,18 @@ export async function injectMessage(cdp, text) {
             document.execCommand?.("selectAll", false, null);
             document.execCommand?.("delete", false, null);
 
-            let inserted = false;
-            try { inserted = !!document.execCommand?.("insertText", false, textToInsert); } catch {}
-            if (!inserted) {
-                editor.textContent = textToInsert;
-                editor.dispatchEvent(new InputEvent("beforeinput", { bubbles:true, inputType:"insertText", data: textToInsert }));
-                editor.dispatchEvent(new InputEvent("input", { bubbles:true, inputType:"insertText", data: textToInsert }));
+            const lines = textToInsert.split('\\n');
+            for(let i=0; i<lines.length; i++) {
+                if (lines[i].length > 0) {
+                    const ok = document.execCommand("insertText", false, lines[i]);
+                    if (!ok) throw new Error('[CDP] execCommand("insertText") failed in injectMessage(). Update text insertion strategy.');
+                }
+                if (i < lines.length - 1) document.execCommand("insertLineBreak");
             }
+            // Trigger final input event for React
+            editor.dispatchEvent(new InputEvent("input", { bubbles:true, inputType:"insertText", data: textToInsert }));
 
-            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-            const submitIcon = document.querySelector(SEL.controls.submitButton);
-            const submit = submitIcon?.closest("button");
-            if (submit && !submit.disabled) {
-                submit.click();
-                return { ok:true, method:"click_submit" };
-            }
-
+            // Fallback to Enter key simulation
             editor.dispatchEvent(new KeyboardEvent("keydown", { bubbles:true, key:"Enter", code:"Enter" }));
             editor.dispatchEvent(new KeyboardEvent("keyup", { bubbles:true, key:"Enter", code:"Enter" }));
 

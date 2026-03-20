@@ -42,7 +42,7 @@ export const SELECTORS = {
         modelClickable: '.flex.min-w-0.max-w-full.cursor-pointer.items-center',   // Model name clickable div
         modelLabel: 'span.select-none.overflow-hidden.text-ellipsis.text-xs',     // Model name text span
         cancelButton: '[data-tooltip-id="input-send-button-cancel-tooltip"]',     // Cancel active generation
-        submitButton: 'svg.lucide-arrow-right',                                   // Submit arrow icon (inside button)
+        submitButton: '[data-tooltip-id="input-send-button-pending-tooltip"]',    // Submit button
         audioButton: '[data-tooltip-id="audio-tooltip"]',                         // Mic button
     },
 

@@ -7,11 +7,11 @@ import { elements } from './ui.js';
 
 let isSending = false;
 
+let unsentQueue = [];
+
 window.addEventListener('agent-stopped-streaming', () => {
-    const q = JSON.parse(localStorage.getItem('unsentQueue') || '[]');
-    if (q.length > 0 && !isSending && !window.isAgentStreaming) {
-        const nextMsg = q.shift();
-        localStorage.setItem('unsentQueue', JSON.stringify(q));
+    if (unsentQueue.length > 0 && !isSending && !window.isAgentStreaming) {
+        const nextMsg = unsentQueue.shift();
         sendMessage(nextMsg);
     }
 });
@@ -23,15 +23,13 @@ export async function sendMessage(text) {
     if (!text || !text.trim() || isSending) return;
 
     if (window.isAgentStreaming) {
-        const q = JSON.parse(localStorage.getItem('unsentQueue') || '[]');
-        q.push(text);
-        localStorage.setItem('unsentQueue', JSON.stringify(q));
+        unsentQueue.push(text);
         
         elements.chatInput.value = '';
         elements.chatInput.style.height = 'auto';
         
         // Affichage temporaire optimiste
-        localStorage.setItem('pendingUserMessage', text);
+        window.pendingUserMessage = text;
         window.dispatchEvent(new CustomEvent('user-message-sent', { detail: text }));
         return;
     }
@@ -43,7 +41,7 @@ export async function sendMessage(text) {
     elements.chatInput.style.height = 'auto';
     
     // Store user message locally for immediate display
-    localStorage.setItem('pendingUserMessage', trimmed);
+    window.pendingUserMessage = trimmed;
     window.dispatchEvent(new CustomEvent('user-message-sent', { detail: trimmed }));
 
     try {

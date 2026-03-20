@@ -5,12 +5,15 @@
 import { fetchWithAuth } from './api.js';
 import { elements } from './ui.js';
 
+let isSending = false;
+
 /**
  * Send a message to the workbench
  */
 export async function sendMessage(text) {
-    if (!text || !text.trim()) return;
+    if (!text || !text.trim() || isSending) return;
 
+    isSending = true;
     const trimmed = text.trim();
     elements.sendBtn.disabled = true;
     elements.chatInput.value = '';
@@ -34,6 +37,7 @@ export async function sendMessage(text) {
     } catch (e) {
         console.error('Failed to send message:', e);
     } finally {
+        isSending = false;
         elements.sendBtn.disabled = false;
     }
 }

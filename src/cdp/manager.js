@@ -67,19 +67,18 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                         if (titleEl) taskTitle = (titleEl.innerText || '').trim();
                         
                         // B. Extract TaskSummary (Paragraph)
-                        const header = iso.querySelector(SEL.agentTask.headerWrapper);
-                        if (header) {
-                            const summaryEl = header.querySelector(SEL.agentTask.summaryContent);
-                            if (summaryEl) {
-                                taskSummary = (summaryEl.innerText || '').trim();
-                                // Fix local image URLs in HTML
-                                const cl = summaryEl.cloneNode(true);
-                                cl.querySelectorAll('img').forEach(img => {
-                                    const src = img.getAttribute('src');
-                                    if (src && src.startsWith('/')) img.src = 'http://localhost:9000' + src;
-                                });
-                                mh = cl.innerHTML || '';
-                            }
+                        taskSummary = null;
+                        mh = '';
+                        const summaryEl = iso.querySelector(SEL.agentTask.summaryContent);
+                        if (summaryEl) {
+                            taskSummary = (summaryEl.innerText || '').trim();
+                            // Fix local image URLs in HTML
+                            const cl = summaryEl.cloneNode(true);
+                            cl.querySelectorAll('img').forEach(img => {
+                                const src = img.getAttribute('src');
+                                if (src && src.startsWith('/')) img.src = 'http://localhost:9000' + src;
+                            });
+                            mh = cl.innerHTML || '';
                         }
                         
                         // C. Extract TaskStatus(es) from Progress Updates section

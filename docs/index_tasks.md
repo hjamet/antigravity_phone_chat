@@ -22,3 +22,4 @@
 | [Nettoyage fichiers debug](tasks/cleanup-debug-files.md) | Déplacer/supprimer les fichiers test et debug de la racine | 2026-03-20 | `Up to date` |
 | [Nettoyage routes (Dette)](tasks/cleanup-routes-debug.md) | Extraction du bloc de debug CDP hors du contrôleur `routes.js` | 2026-03-20 | `Up to date` |
 | [Refonte Extraction Chat (No-Fallback)](tasks/refactor-chat-extraction-selectors.md) | Migration de `captureSnapshot` vers des CSS Selectors stricts sans heuristiques textuelles | 2026-03-20 | `Up to date` |
+| [Refactoring Commandes CDP (No-Fallback)](tasks/refactor-cdp-controls-nofallback.md) | Migration de toutes les commandes CDP vers des CSS Selectors stricts sans heuristiques textuelles | 2026-03-20 | `Up to date` |

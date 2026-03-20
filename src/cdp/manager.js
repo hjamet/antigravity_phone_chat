@@ -38,7 +38,12 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                 const turns = Array.from(turnsDiv.children);
                 for (const turn of turns) {
                     // 1. USER Messages
-                    const ue = turn.querySelector(SEL.user.messageBlock);
+                    // Filter: must be a real message block (large enough), not a code/file mention
+                    const userCandidates = Array.from(turn.querySelectorAll(SEL.user.messageBlock))
+                        .filter(el => el.offsetHeight > 30 && el.offsetWidth > 200 
+                                   && !el.closest('.context-scope-mention')
+                                   && !el.classList.contains('context-scope-mention'));
+                    const ue = userCandidates[0];
                     if (ue) {
                         const ut = (ue.innerText || '').trim();
                         if (ut.length > 5) {
@@ -80,22 +85,19 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                         // C. Extract TaskStatus(es) from Progress Updates section
                         const sections = Array.from(iso.querySelectorAll(SEL.agentTask.sectionBorderT));
                         for (const sec of sections) {
-                            const labelEl = sec.querySelector(SEL.agentTask.sectionLabelProgress);
-                            if (labelEl) {
+                            // Identify Progress Updates section by its header row
+                            const headerRow = sec.querySelector(SEL.agentTask.sectionLabelProgress);
+                            if (headerRow && (headerRow.innerText || '').includes('Progress')) {
                                 // This is definitively the Progress Updates section
-                                const scrollable = sec.querySelector(SEL.agentTask.progressScrollable);
-                                if (scrollable) {
-                                    // Steps have sticky headers containing TaskStatus
-                                    const statusHeaders = Array.from(scrollable.querySelectorAll(SEL.agentTask.statusHeader));
-                                    for (const sh of statusHeaders) {
-                                        const textEl = sh.querySelector(SEL.agentTask.statusText);
-                                        if (textEl) {
-                                            const st = (textEl.innerText || '').trim();
-                                            // Check against numbers (like "1", "2") often present in these headers
-                                            if (st && st.length > 5 && !/^\\d+$/.test(st)) {
-                                                allStatuses.push(st);
-                                                taskStatus = st; // Most recent step
-                                            }
+                                // TaskStatus lives in sticky headers inside this section
+                                const statusHeaders = Array.from(sec.querySelectorAll(SEL.agentTask.statusHeader));
+                                for (const sh of statusHeaders) {
+                                    const textEl = sh.querySelector(SEL.agentTask.statusText);
+                                    if (textEl) {
+                                        const st = (textEl.innerText || '').trim();
+                                        if (st && st.length > 5 && !/^\d+$/.test(st)) {
+                                            allStatuses.push(st);
+                                            taskStatus = st; // Most recent step
                                         }
                                     }
                                 }

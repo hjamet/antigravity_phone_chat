@@ -27,8 +27,9 @@ export const SELECTORS = {
         summaryContent: '.leading-relaxed.select-text',                // TaskSummary
         sectionBorderT: '.border-t.p-2.text-sm',
         sectionLabelNoise: '.mb-1.text-sm.opacity-50',                 // Files Edited / BG Steps
+        sectionLabelProgress: '.flex.items-center.justify-between',    // Progress Updates header row
         progressScrollable: '.overflow-y-auto.overflow-x-hidden',
-        statusHeader: '.sticky.top-0 .flex.items-center.gap-2.font-medium.pb-2', // TaskStatus container
+        statusHeader: '.sticky.top-0 .flex.items-center.gap-2.font-medium', // TaskStatus container (pb varies)
         statusText: '.leading-relaxed'                                 // TaskStatus text inside header
     },
 

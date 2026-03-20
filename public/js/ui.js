@@ -151,15 +151,10 @@ function buildMessageInner(msg) {
             html += '<div class="task-steps">';
             cleanStatuses.forEach((s, i) => {
                 html += `<div class="task-step"><span class="step-num">${i + 1}</span><span class="step-text">${formatMarkdown(s, true)}</span></div>`;
-                // Place the paragraph directly under the LAST step
-                if (i === cleanStatuses.length - 1 && paragraphHtml) {
-                    html += paragraphHtml;
-                }
             });
             html += '</div>';
-        } else {
-            html += paragraphHtml;
         }
+        html += paragraphHtml;
         
         return html;
     } else {

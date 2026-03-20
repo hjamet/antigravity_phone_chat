@@ -47,14 +47,34 @@ export class ChatHistoryService {
             if (msg.type === 'taskBlock') {
                 if (!msg.taskSummary && (!msg.allStatuses || msg.allStatuses.length === 0)) continue;
                 
-                // Determine a key for finding existing blocks, prioritizing taskTitle
-                const k = msg.taskTitle || (msg.taskSummary ? msg.taskSummary.substring(0, 50) : '');
+                // We must handle deduplication correctly when multiple taskBlocks are captured at once.
+                let existingIdx = -1;
                 
-                // Find an existing taskBlock in the timeline that matches the current message
-                const existingIdx = this.chatTimeline.findIndex(m => 
-                    m.type === 'taskBlock' && 
-                    (m.taskTitle === msg.taskTitle || (m.taskSummary && m.taskSummary.substring(0, 50) === k))
-                );
+                // 1. Try to find by exact title (if it's a finished, named task)
+                if (msg.taskTitle && msg.taskTitle !== 'Action en cours') {
+                    existingIdx = this.chatTimeline.findIndex(m => m.type === 'taskBlock' && m.taskTitle === msg.taskTitle);
+                }
+                
+                // 2. If not found, try to find by summary prefix
+                if (existingIdx === -1 && msg.taskSummary) {
+                    const prefix = msg.taskSummary.substring(0, 50);
+                    existingIdx = this.chatTimeline.findIndex(m => m.type === 'taskBlock' && m.taskSummary && m.taskSummary.substring(0, 50) === prefix);
+                }
+                
+                // 3. Fallback: if the incoming msg is the current task, it should overwrite the LAST taskBlock 
+                // ONLY IF the last taskBlock is still unnamed ("Action en cours").
+                if (existingIdx === -1) {
+                    let lastIdx = -1;
+                    for (let i = this.chatTimeline.length - 1; i >= 0; i--) {
+                        if (this.chatTimeline[i].type === 'taskBlock') {
+                            lastIdx = i;
+                            break;
+                        }
+                    }
+                    if (lastIdx !== -1 && this.chatTimeline[lastIdx].taskTitle === 'Action en cours') {
+                        existingIdx = lastIdx;
+                    }
+                }
                 
                 if (existingIdx !== -1) {
                     // Update existing block
@@ -64,7 +84,7 @@ export class ChatHistoryService {
                     const isThought = msg.taskTitle && msg.taskTitle.includes('Thought for');
 
                     // Update taskTitle if present and not a 'Thought for' block
-                    if (msg.taskTitle && !isThought && msg.taskTitle.length < 50) {
+                    if (msg.taskTitle && !isThought) {
                         existingBlock.taskTitle = msg.taskTitle;
                     }
                     // Update taskStatus if present
@@ -72,10 +92,10 @@ export class ChatHistoryService {
                         existingBlock.taskStatus = msg.taskStatus;
                     }
                     
-                    // Only apply taskSummary/taskSummaryHtml if it's not a 'Thought for' block
+                    // Only apply taskSummary/html if it's not a 'Thought for' block
                     if (!isThought) {
                         if (msg.taskSummary) existingBlock.taskSummary = msg.taskSummary;
-                        if (msg.taskSummaryHtml) existingBlock.taskSummaryHtml = msg.taskSummaryHtml;
+                        if (msg.html) existingBlock.html = msg.html;
                     }
 
                     // Update allStatuses by merging, ensuring uniqueness and order
@@ -237,16 +257,13 @@ export class ChatHistoryService {
      */
     static _filterCleanStatuses(statuses) {
         return statuses.filter(s => {
-            if (!s || s.length < 15 || s.length > 150) return false;
+            if (!s || s.length < 15 || s.length > 200) return false;
             
-            // Must start with a capitalized word (TaskStatus always starts cleanly)
-            if (!/^[A-Z][a-z]/.test(s)) return false;
+            // Reject structural patterns like terminal colors, JSON braces
+            if (/[{}[\]`\\]/.test(s)) return false;
             
-            // Reject anything with code/structural patterns
-            if (/[{}()\[\]"'`\\<>;=]/.test(s)) return false;
-            
-            // Reject lines with colons (like "STATUS:", "TITLE:", "cls:")
-            if (s.includes(':')) return false;
+            // Reject lines with generic terminal outputs
+            if (s.startsWith('Running command') || s.startsWith('Exit code')) return false;
             
             // Reject conversational text (reasoning, questions, explanations)
             if (/^(Now |But |Also |The |I |This |Still |However |Wait|Looking|Found |Error |Sent )/i.test(s)) return false;

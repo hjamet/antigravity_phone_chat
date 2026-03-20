@@ -84,7 +84,7 @@ export class ChatHistoryService {
                     const isThought = msg.taskTitle && msg.taskTitle.includes('Thought for');
 
                     // Update taskTitle if present and not a 'Thought for' block
-                    if (msg.taskTitle && !isThought) {
+                    if (msg.taskTitle && msg.taskTitle !== 'Action en cours' && !isThought) {
                         existingBlock.taskTitle = msg.taskTitle;
                     }
                     // Update taskStatus if present

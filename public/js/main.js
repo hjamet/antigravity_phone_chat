@@ -61,7 +61,7 @@ function showDropdown(anchorEl, options, currentValue, onSelect) {
     
     const rect = anchorEl.getBoundingClientRect();
     menu.style.left = `${Math.max(8, rect.left)}px`;
-    menu.style.bottom = `${window.innerHeight - rect.top + 8}px`;
+    menu.style.top = `${rect.bottom + 8}px`;
     
     setTimeout(() => {
         const close = (e) => {

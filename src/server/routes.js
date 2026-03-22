@@ -209,6 +209,7 @@ export function setupRoutes(app, {
     router.post('/select-chat', async (req, res) => {
         const { title } = req.body;
         if (!title) return res.status(400).json({ error: 'Chat title required' });
+        chatHistoryService.reset(5000);
         const result = await managerCdp.selectChat(cdpConnections.manager, title);
         res.json(result);
     });
@@ -342,6 +343,31 @@ export function setupRoutes(app, {
         const { index } = req.body;
         if (index === undefined) return res.status(400).json({ error: 'index required' });
         const result = await managerCdp.selectWorkflowItem(cdpConnections.manager, index);
+        res.json(result);
+    });
+
+    // --- Artifacts ---
+
+    router.get('/api/artifacts', async (req, res) => {
+        const result = await managerCdp.listArtifacts(cdpConnections.manager);
+        res.json(result);
+    });
+
+    router.get('/api/artifacts/:name', async (req, res) => {
+        const { name } = req.params;
+        if (!name) return res.status(400).json({ error: 'Artifact name required' });
+        const result = await managerCdp.getArtifactContent(cdpConnections.manager, decodeURIComponent(name));
+        res.json(result);
+    });
+
+    router.post('/api/artifacts/:name/comment', async (req, res) => {
+        const { name } = req.params;
+        const { comment } = req.body;
+        if (!name || !comment) return res.status(400).json({ error: 'name and comment required' });
+        const result = await managerCdp.addArtifactComment(cdpConnections.manager, {
+            artifactName: decodeURIComponent(name),
+            comment
+        });
         res.json(result);
     });
 

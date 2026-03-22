@@ -85,5 +85,23 @@ export const SELECTORS = {
         typeaheadList: 'div[role="listbox"][aria-label="Typeahead menu"]',         // Secondary typeahead list
         typeaheadItem: 'div[role="listbox"][aria-label="Typeahead menu"] > div',   // Individual typeahead option
         workflowList: '.absolute.-top-2.-translate-y-full.bg-ide-editor-background', // Workflow list overlay
-    }
+    },
+
+    // ---- Artifacts / Changes Panel ----
+    artifacts: {
+        toggleSidebar: '[data-testid="toggle-aux-sidebar"]',                      // Button to open/close the aux sidebar
+        sidebarPanel: '.bg-sideBar-background',                                   // Aux sidebar container
+        sectionHeader: '.text-xs.opacity-50.select-none',                         // Section header ("Artifacts", "Files Changed")
+        artifactSectionParent: '.flex.flex-col.w-full',                           // Parent of the Artifacts section
+        viewerPanel: '.flex.w-full.h-full.outline-none.flex-col',                 // Artifact viewer panel (2 children: header + content)
+        viewerHeader: '.border-gray-500\\/20.flex.border-b-\\[1px\\]',            // Viewer header bar (h=40)
+        viewerContent: '.leading-relaxed.select-text',                            // Rendered markdown content div
+        viewerScroll: '.jetski-scrollable-element',                               // Scrollable container for viewer
+        markdownParagraph: 'p.animate-markdown',                                  // Individual markdown paragraph
+        markdownAlert: '.markdown-alert',                                         // Alert boxes in markdown
+        backButton: '[data-tooltip-id$="-back"]',                                 // Back navigation button
+        forwardButton: '[data-tooltip-id$="-forward"]',                           // Forward navigation button
+        reviewButton: 'button[aria-haspopup="dialog"]',                           // "Review" button (opens comment dialog)
+        commentEditor: '[contenteditable="true"][class*="bg-gray-500"]',          // Comment text editor
+    },
 };

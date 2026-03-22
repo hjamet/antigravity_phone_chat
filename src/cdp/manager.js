@@ -952,8 +952,11 @@ export async function triggerPicker(cdp, char) {
         // Wait for picker dialog to appear
         await new Promise(r => setTimeout(r, 1000));
 
-        const dialog = document.querySelector(SEL.picker.dialog);
-        if (!dialog) throw new Error('[CDP] Selector broken: "' + SEL.picker.dialog + '" — picker did not appear in triggerPicker()');
+        const dialogs = Array.from(document.querySelectorAll(SEL.picker.dialog));
+        if (dialogs.length === 0) throw new Error('[CDP] Selector broken: "' + SEL.picker.dialog + '" — picker did not appear in triggerPicker()');
+        
+        // Always take the LAST dialog as popups are appended to the end of the DOM
+        const dialog = dialogs[dialogs.length - 1];
 
         // Auto-click the Workflows category
         const categoryBtns = dialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
@@ -1010,8 +1013,9 @@ export async function selectPickerOption(cdp, index) {
     const EXPRESSION = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
 
-        const dialog = document.querySelector(SEL.picker.dialog);
-        if (!dialog) throw new Error('[CDP] Selector broken: "' + SEL.picker.dialog + '" — picker not visible in selectPickerOption()');
+        const dialogs = Array.from(document.querySelectorAll(SEL.picker.dialog));
+        if (dialogs.length === 0) throw new Error('[CDP] Selector broken: "' + SEL.picker.dialog + '" — picker not visible in selectPickerOption()');
+        const dialog = dialogs[dialogs.length - 1];
 
         const optionEls = dialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
         const target = optionEls[${Number(index)}];
@@ -1031,8 +1035,8 @@ export async function selectPickerOption(cdp, index) {
             return { ok: true, type: 'typeahead', items };
         }
 
-        // Check for a new visible dialog (some pickers replace the dialog)
-        const newDialog = document.querySelector(SEL.picker.dialog);
+        const newDialogs = Array.from(document.querySelectorAll(SEL.picker.dialog));
+        const newDialog = newDialogs.length > 0 ? newDialogs[newDialogs.length - 1] : null;
         if (newDialog && newDialog !== dialog) {
             const newOpts = newDialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
             const items = Array.from(newOpts).map((el, i) => ({
@@ -1121,8 +1125,9 @@ export async function selectWorkflowItem(cdp, domIndex) {
             document.execCommand("insertText", false, "/");
             await new Promise(r => setTimeout(r, 1000));
             
-            const dialog = document.querySelector(SEL.picker.dialog);
-            if (!dialog) throw new Error('[CDP] Dialog did not reappear');
+            const dialogs = Array.from(document.querySelectorAll(SEL.picker.dialog));
+            if (dialogs.length === 0) throw new Error('[CDP] Dialog did not reappear');
+            const dialog = dialogs[dialogs.length - 1];
             
             const categoryBtns = dialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
             if (categoryBtns[2]) categoryBtns[2].click();
@@ -1137,15 +1142,14 @@ export async function selectWorkflowItem(cdp, domIndex) {
 
         if (!workflowList) throw new Error('[CDP] Selector broken: "' + SEL.picker.workflowList + '" — not found after retry in selectWorkflowItem()');
 
-        const target = workflowList.children[${Number(domIndex)}];
-        if (!target) throw new Error('[CDP] Workflow domIndex ${domIndex} not found in selectWorkflowItem(). Only ' + workflowList.children.length + ' children.');
+        const wrapper = workflowList.children[${Number(domIndex)}];
+        if (!wrapper) throw new Error('[CDP] Workflow domIndex ${domIndex} not found in selectWorkflowItem(). Only ' + workflowList.children.length + ' children.');
 
+        // The wrapper <div> has no click handler — the actual clickable element
+        // is the inner <div class="cursor-pointer">
+        const target = wrapper.querySelector('.cursor-pointer') || wrapper;
         target.click();
         await new Promise(r => setTimeout(r, 500));
-
-        // Editor gets focus automatically, but we can clear any "junk" left by the slash
-        // Wait, BeautifulMentions automatically replaces the typed part with the badge.
-        // So hitting click() will transform the text into a badge.
 
         return { ok: true };
     })()`;
@@ -1154,6 +1158,285 @@ export async function selectWorkflowItem(cdp, domIndex) {
         try {
             const res = await cdp.call("Runtime.evaluate", {
                 expression: EXPRESSION,
+                returnByValue: true,
+                awaitPromise: true,
+                contextId: ctx.id
+            });
+            if (res.result?.value) return res.result.value;
+        } catch (e) {}
+    }
+    return { error: 'Context failed' };
+}
+
+/**
+ * List artifacts from the Agent Manager aux sidebar
+ * Opens the changes panel if not already open, extracts artifact names
+ */
+export async function listArtifacts(cdp) {
+    if (!cdp) return { error: 'Not connected', artifacts: [] };
+
+    const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
+        try {
+            // 1. Ensure the aux sidebar is open
+            const toggleBtn = document.querySelector(SEL.artifacts.toggleSidebar);
+            if (!toggleBtn) throw new Error('[CDP] Selector broken: "' + SEL.artifacts.toggleSidebar + '" — not found in listArtifacts()');
+
+            // Check if sidebar is already visible by looking for the sidebar panel content
+            const sidebarContent = document.querySelector('.px-3.pb-2.flex.h-full.w-full.flex-col.gap-4');
+            if (!sidebarContent || sidebarContent.offsetWidth < 100) {
+                toggleBtn.click();
+                await new Promise(r => setTimeout(r, 1000));
+            }
+
+            // 2. Find the "Artifacts" section header
+            const allDivs = Array.from(document.querySelectorAll('div'));
+            const artifactHeaders = allDivs.filter(d => {
+                const t = d.innerText?.trim() || '';
+                return d.offsetParent !== null && t.startsWith('Artifacts') && d.offsetHeight < 40 && d.offsetWidth > 100;
+            });
+            
+            if (artifactHeaders.length === 0) return { artifacts: [], error: 'Artifacts section not found in sidebar' };
+
+            // 3. Navigate to the artifacts container
+            const artifactSection = artifactHeaders[0].closest('.flex.flex-col');
+            if (!artifactSection) return { artifacts: [], error: 'Artifact section parent not found' };
+
+            // 4. Extract artifact items (text elements that are NOT the header and not "info")
+            const items = Array.from(artifactSection.querySelectorAll('*'))
+                .filter(el => {
+                    const t = el.innerText?.trim() || '';
+                    return el.offsetParent !== null
+                        && el.offsetHeight > 10 && el.offsetHeight < 35
+                        && t.length > 2
+                        && t !== 'Artifacts'
+                        && t !== 'info'
+                        && !t.includes('\\n')
+                        && el.children.length === 0; // Leaf text elements only
+                });
+
+            const artifacts = [];
+            const seen = new Set();
+            for (const item of items) {
+                const name = item.innerText?.trim();
+                if (name && !seen.has(name)) {
+                    seen.add(name);
+                    artifacts.push({
+                        name,
+                        isClickable: getComputedStyle(item).cursor === 'pointer'
+                            || getComputedStyle(item.parentElement).cursor === 'pointer',
+                    });
+                }
+            }
+
+            return { artifacts };
+        } catch (e) { return { error: e.toString(), artifacts: [] }; }
+    })()`;
+
+    for (const ctx of cdp.contexts) {
+        try {
+            const res = await cdp.call("Runtime.evaluate", {
+                expression: EXP,
+                returnByValue: true,
+                awaitPromise: true,
+                contextId: ctx.id
+            });
+            if (res.result?.value) return res.result.value;
+        } catch (e) {}
+    }
+    return { error: 'Context failed', artifacts: [] };
+}
+
+/**
+ * Get the content of a specific artifact by clicking on it and extracting rendered markdown
+ * @param {Object} cdp CDP connection
+ * @param {string} name Artifact name (e.g. "Implementation Plan", "Task", "Walkthrough")
+ */
+export async function getArtifactContent(cdp, name) {
+    if (!cdp) return { error: 'Not connected' };
+    const safeName = JSON.stringify(name);
+
+    const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
+        try {
+            const targetName = ${safeName};
+
+            // 1. Ensure sidebar is open
+            const toggleBtn = document.querySelector(SEL.artifacts.toggleSidebar);
+            if (!toggleBtn) throw new Error('[CDP] Selector broken: "' + SEL.artifacts.toggleSidebar + '" — not found in getArtifactContent()');
+
+            const sidebarContent = document.querySelector('.px-3.pb-2.flex.h-full.w-full.flex-col.gap-4');
+            if (!sidebarContent || sidebarContent.offsetWidth < 100) {
+                toggleBtn.click();
+                await new Promise(r => setTimeout(r, 1000));
+            }
+
+            // 2. Find and click the artifact by name
+            const allEls = Array.from(document.querySelectorAll('*'))
+                .filter(el => el.offsetParent !== null && el.innerText?.trim() === targetName
+                    && el.children.length === 0);
+
+            const clickTarget = allEls.find(el =>
+                getComputedStyle(el).cursor === 'pointer'
+                || getComputedStyle(el.parentElement).cursor === 'pointer'
+            ) || allEls[allEls.length - 1];
+
+            if (!clickTarget) return { error: 'Artifact "' + targetName + '" not found in sidebar' };
+
+            // Click the clickable parent if needed
+            const actualTarget = getComputedStyle(clickTarget).cursor === 'pointer'
+                ? clickTarget
+                : clickTarget.parentElement;
+            actualTarget.click();
+
+            // 3. Wait for the viewer to render
+            await new Promise(r => setTimeout(r, 2000));
+
+            // 4. Find the viewer content (largest leading-relaxed select-text)
+            const viewers = Array.from(document.querySelectorAll('div'))
+                .filter(d => {
+                    const cls = d.className || '';
+                    return cls.includes('leading-relaxed') && cls.includes('select-text')
+                        && d.offsetWidth > 200 && (d.innerText?.length || 0) > 50;
+                })
+                .sort((a, b) => (b.innerText?.length || 0) - (a.innerText?.length || 0));
+
+            const viewer = viewers[0];
+            if (!viewer) return { error: 'Viewer content not found after clicking artifact' };
+
+            // 5. Extract content
+            const content = viewer.innerText || '';
+            const html = viewer.innerHTML || '';
+
+            // 6. Extract viewer header info (title, timestamp)
+            let headerInfo = {};
+            const artPanel = viewer.closest('.flex.w-full.h-full.outline-none.flex-col');
+            if (artPanel && artPanel.children.length >= 2) {
+                const header = artPanel.children[0];
+                headerInfo.headerText = header?.innerText?.substring(0, 200);
+
+                // Check for Proceed button
+                const proceedBtn = Array.from(artPanel.querySelectorAll('button'))
+                    .find(b => b.innerText?.trim() === 'Proceed');
+                headerInfo.hasProceed = !!proceedBtn;
+
+                // Check for Review button
+                const reviewBtn = artPanel.querySelector('button[aria-haspopup="dialog"]');
+                headerInfo.hasReview = !!reviewBtn;
+            }
+
+            return {
+                name: targetName,
+                content: content.substring(0, 50000),
+                html: html.substring(0, 100000),
+                ...headerInfo,
+            };
+        } catch (e) { return { error: e.toString() }; }
+    })()`;
+
+    for (const ctx of cdp.contexts) {
+        try {
+            const res = await cdp.call("Runtime.evaluate", {
+                expression: EXP,
+                returnByValue: true,
+                awaitPromise: true,
+                contextId: ctx.id
+            });
+            if (res.result?.value && !res.result.value.error) return res.result.value;
+            if (res.result?.value?.error) return res.result.value;
+        } catch (e) {}
+    }
+    return { error: 'Context failed' };
+}
+
+/**
+ * Add a comment on an artifact via CDP
+ * Opens the artifact, clicks the Review button, types in the comment editor and submits
+ * @param {Object} cdp CDP connection
+ * @param {Object} params { artifactName, comment }
+ */
+export async function addArtifactComment(cdp, { artifactName, comment }) {
+    if (!cdp) return { error: 'Not connected' };
+    const safeName = JSON.stringify(artifactName);
+    const safeComment = JSON.stringify(comment);
+
+    const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
+        try {
+            // 1. Find the artifact viewer panel (it should already be open)
+            let viewer = Array.from(document.querySelectorAll('div'))
+                .filter(d => {
+                    const cls = d.className || '';
+                    return cls.includes('leading-relaxed') && cls.includes('select-text')
+                        && d.offsetWidth > 200 && (d.innerText?.length || 0) > 50;
+                })
+                .sort((a, b) => (b.innerText?.length || 0) - (a.innerText?.length || 0))[0];
+
+            if (!viewer) return { error: 'Artifact viewer not open. Call getArtifactContent first.' };
+
+            // 2. Find the Review button in the viewer panel
+            const artPanel = viewer.closest('.flex.w-full.h-full.outline-none.flex-col');
+            if (!artPanel) return { error: 'Artifact panel container not found' };
+
+            const reviewBtn = artPanel.querySelector('button[aria-haspopup="dialog"]');
+            if (!reviewBtn) return { error: 'Review button not found in artifact viewer header' };
+
+            // 3. Click Review to open the comment dialog
+            reviewBtn.click();
+            await new Promise(r => setTimeout(r, 1000));
+
+            // 4. Find the comment editor
+            const commentEditor = document.querySelector(SEL.artifacts.commentEditor);
+            if (!commentEditor) return { error: 'Comment editor not found after clicking Review. Selector: ' + SEL.artifacts.commentEditor };
+
+            // 5. Focus and type in the comment
+            commentEditor.focus();
+            document.execCommand("selectAll", false, null);
+            document.execCommand("delete", false, null);
+            await new Promise(r => setTimeout(r, 100));
+
+            const text = ${safeComment};
+            const lines = text.split('\\n');
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].length > 0) {
+                    document.execCommand("insertText", false, lines[i]);
+                }
+                if (i < lines.length - 1) document.execCommand("insertLineBreak");
+            }
+            await new Promise(r => setTimeout(r, 200));
+
+            // 6. Find and click the submit/add comment button
+            // Look for a button near the comment editor that submits (typically Enter key or a button)
+            const parentContainer = commentEditor.closest('div[class*="flex"]');
+            const submitBtns = parentContainer
+                ? Array.from(parentContainer.querySelectorAll('button'))
+                    .filter(b => b.offsetParent !== null && b.offsetWidth > 0)
+                : [];
+
+            if (submitBtns.length > 0) {
+                // Click the last visible button (usually the submit button)
+                submitBtns[submitBtns.length - 1].click();
+                await new Promise(r => setTimeout(r, 500));
+                return { success: true, method: 'button_click' };
+            }
+
+            // Fallback: submit via Enter key
+            commentEditor.dispatchEvent(new KeyboardEvent("keydown", {
+                bubbles: true, key: "Enter", code: "Enter"
+            }));
+            commentEditor.dispatchEvent(new KeyboardEvent("keyup", {
+                bubbles: true, key: "Enter", code: "Enter"
+            }));
+            await new Promise(r => setTimeout(r, 500));
+
+            return { success: true, method: 'enter_key' };
+        } catch (e) { return { error: e.toString() }; }
+    })()`;
+
+    for (const ctx of cdp.contexts) {
+        try {
+            const res = await cdp.call("Runtime.evaluate", {
+                expression: EXP,
                 returnByValue: true,
                 awaitPromise: true,
                 contextId: ctx.id

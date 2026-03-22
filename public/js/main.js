@@ -10,6 +10,7 @@ import { loadHistory, startNewChat } from './history.js?v=10';
 import { loadProjects } from './projects.js?v=10';
 import { fetchWithAuth } from './api.js?v=10';
 import { initPicker, onTriggerChar, hidePicker, isPickerVisible, getWorkflowPrefix, clearWorkflow } from './picker.js?v=12';
+import { loadArtifacts, initArtifacts } from './artifacts.js?v=1';
 
 /**
  * Poll /api/chat-state and render.
@@ -171,6 +172,13 @@ async function init() {
         toggleLayer(elements.historyLayer, true);
         await loadHistory();
     });
+
+    // Artifacts button
+    document.getElementById('artifactsBtn')?.addEventListener('click', async () => {
+        const layer = document.getElementById('artifactsLayer');
+        toggleLayer(layer, true);
+        await loadArtifacts();
+    });
     
     // Remote Scroll controls (Touch & Wheel)
     let lastScrollY = 0;
@@ -295,6 +303,9 @@ async function init() {
 
     // Initialize picker
     initPicker();
+
+    // Initialize artifacts
+    initArtifacts();
 }
 
 /**

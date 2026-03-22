@@ -31,6 +31,14 @@
                         <line x1="5" y1="12" x2="19" y2="12"></line>
                     </svg>
                 </button>
+                <button class="artifacts-btn" id="artifactsBtn" aria-label="Artifacts" title="View Artifacts">
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                </button>
                 <button class="history-btn" id="historyBtn" aria-label="Chat History" title="Past Conversations">
                     <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -196,7 +204,45 @@
         </div>
     </div>
 
-    <script type="module" src="/js/main.js?v=10"></script>
+    <!-- Artifacts Layer (Full Screen) -->
+    <div class="history-layer" id="artifactsLayer">
+        <div class="history-header">
+            <button class="icon-btn" onclick="hideArtifacts()" aria-label="Back">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+            </button>
+            <h2>Artifacts</h2>
+            <div style="width: 24px;"></div>
+        </div>
+        <div class="history-content" id="artifactsList" style="padding: 12px;">
+            <div class="loading-state">
+                <div class="loading-spinner"></div>
+                <p>Loading artifacts...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Artifact Viewer (Half-screen overlay) -->
+    <div class="artifact-viewer" id="artifactViewer">
+        <div class="artifact-viewer-header">
+            <button class="icon-btn" id="artifactViewerClose" aria-label="Close">
+                <svg viewBox="0 0 24 24" width="20" height="20">
+                    <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+            </button>
+            <span class="artifact-viewer-title" id="artifactViewerTitle">Artifact</span>
+            <button class="artifact-proceed-btn" id="artifactProceedBtn" style="display:none;">Proceed</button>
+        </div>
+        <div class="artifact-viewer-body" id="artifactViewerContent">
+        </div>
+        <div class="artifact-comment-bar">
+            <textarea id="artifactCommentInput" placeholder="Add a comment..." rows="1"></textarea>
+            <button id="artifactCommentSubmit" class="artifact-comment-send">Add Comment</button>
+        </div>
+    </div>
+
+    <script type="module" src="/js/main.js?v=11"></script>
 </body>
 
 </html>

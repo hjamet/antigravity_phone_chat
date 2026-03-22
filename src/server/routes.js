@@ -190,7 +190,7 @@ export function setupRoutes(app, {
         if (!workspace) {
             return res.json({ error: 'Cannot determine current workspace. Open a project first.' });
         }
-        // 2. Reset the server-side chat history cache
+        // 2. Reset the server-side chat history cache (will intelligently block stale DOM)
         chatHistoryService.reset();
         // 3. Open the project (same as select-project) — this creates a new conversation
         const result = await managerCdp.openProject(cdpConnections.manager, { name: workspace });
@@ -209,7 +209,7 @@ export function setupRoutes(app, {
     router.post('/select-chat', async (req, res) => {
         const { title } = req.body;
         if (!title) return res.status(400).json({ error: 'Chat title required' });
-        chatHistoryService.reset(5000);
+        chatHistoryService.reset();
         const result = await managerCdp.selectChat(cdpConnections.manager, title);
         res.json(result);
     });

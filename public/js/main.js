@@ -97,17 +97,24 @@ async function init() {
     // 3. Start 1-second polling loop (primary update mechanism)
     setInterval(pollChatState, 1000);
 
-    // 4. Attach Event Listeners
-    elements.sendBtn?.addEventListener('click', () => {
+    // 4. Unified send handler — prevents double-send with workflow prefix
+    let _sendGuard = false;
+    function doSend() {
+        if (_sendGuard) return;
         if (window.isAgentStreaming) {
             import('./chat.js?v=10').then(m => m.stopGeneration());
-        } else {
-            const prefix = getWorkflowPrefix();
-            const text = elements.chatInput.value;
-            import('./chat.js?v=10').then(m => m.sendMessage(prefix + text));
-            clearWorkflow();
+            return;
         }
-    });
+        _sendGuard = true;
+        const prefix = getWorkflowPrefix();
+        const text = elements.chatInput.value;
+        clearWorkflow();
+        sendMessage(prefix + text);
+        // Release guard after a short delay to block any duplicate trigger
+        setTimeout(() => { _sendGuard = false; }, 1000);
+    }
+
+    elements.sendBtn?.addEventListener('click', doSend);
     
     elements.chatInput?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -116,11 +123,7 @@ async function init() {
                 hidePicker();
                 return;
             }
-            // Prepend workflow prefix if a workflow badge is active
-            const prefix = getWorkflowPrefix();
-            const text = elements.chatInput.value;
-            sendMessage(prefix + text);
-            clearWorkflow();
+            doSend();
         }
         // Detect "/" for workflow picker trigger (only when input is empty)
         if (e.key === '/') {

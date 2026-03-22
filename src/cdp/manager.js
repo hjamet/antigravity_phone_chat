@@ -142,6 +142,24 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                             }
                         }
                     }
+
+                    // 4. ARTIFACT Cards inline — H4 with SPAN.truncate (file preview cards)
+                    const artHeadings = Array.from(turn.querySelectorAll('h4 span.truncate'))
+                        .filter(el => el.offsetParent !== null && el.offsetWidth > 30);
+                    if (artHeadings.length > 0) {
+                        const refs = [];
+                        for (const span of artHeadings) {
+                            const name = span.innerText?.trim();
+                            if (name && name.length > 1 && name.length < 80) {
+                                refs.push(name);
+                            }
+                        }
+                        // Attach to the last collected message from this turn
+                        if (refs.length > 0 && collected.length > 0) {
+                            const last = collected[collected.length - 1];
+                            last.artifactRefs = (last.artifactRefs || []).concat(refs);
+                        }
+                    }
                 }
             }
             
@@ -1189,45 +1207,36 @@ export async function listArtifacts(cdp) {
                 await new Promise(r => setTimeout(r, 1000));
             }
 
-            // 2. Find the "Artifacts" section header
+            // 2. Find the "Artifacts" header by its exact own-text (not innerText which includes children)
             const allDivs = Array.from(document.querySelectorAll('div'));
-            const artifactHeaders = allDivs.filter(d => {
-                const t = d.innerText?.trim() || '';
-                return d.offsetParent !== null && t.startsWith('Artifacts') && d.offsetHeight < 40 && d.offsetWidth > 100;
+            const artifactHeader = allDivs.find(d => {
+                const ownText = Array.from(d.childNodes)
+                    .filter(n => n.nodeType === 3)
+                    .map(n => n.textContent.trim())
+                    .join(' ');
+                return ownText === 'Artifacts' && d.offsetParent !== null;
             });
             
-            if (artifactHeaders.length === 0) return { artifacts: [], error: 'Artifacts section not found in sidebar' };
+            if (!artifactHeader) return { artifacts: [], error: 'Artifacts header not found in sidebar' };
 
-            // 3. Navigate to the artifacts container
-            const artifactSection = artifactHeaders[0].closest('.flex.flex-col');
-            if (!artifactSection) return { artifacts: [], error: 'Artifact section parent not found' };
+            // 3. The artifact list is the UL sibling of the header's parent
+            // Structure: parent(.flex.items-center.gap-1.select-none) > [div "Artifacts", span "info"]
+            // Sibling UL: ul.mt-2.space-y-1 containing the actual artifact items
+            const headerRow = artifactHeader.parentElement; // .flex.items-center.gap-1.select-none
+            const artifactList = headerRow?.nextElementSibling; // UL.mt-2.space-y-1
 
-            // 4. Extract artifact items (text elements that are NOT the header and not "info")
-            const items = Array.from(artifactSection.querySelectorAll('*'))
-                .filter(el => {
-                    const t = el.innerText?.trim() || '';
-                    return el.offsetParent !== null
-                        && el.offsetHeight > 10 && el.offsetHeight < 35
-                        && t.length > 2
-                        && t !== 'Artifacts'
-                        && t !== 'info'
-                        && !t.includes('\\n')
-                        && el.children.length === 0; // Leaf text elements only
-                });
-
-            const artifacts = [];
-            const seen = new Set();
-            for (const item of items) {
-                const name = item.innerText?.trim();
-                if (name && !seen.has(name)) {
-                    seen.add(name);
-                    artifacts.push({
-                        name,
-                        isClickable: getComputedStyle(item).cursor === 'pointer'
-                            || getComputedStyle(item.parentElement).cursor === 'pointer',
-                    });
-                }
+            if (!artifactList || artifactList.tagName !== 'UL') {
+                return { artifacts: [], error: 'Artifact UL not found as sibling of header row' };
             }
+
+            // 4. Extract LI items from the UL
+            const listItems = Array.from(artifactList.querySelectorAll('li'));
+            const artifacts = listItems
+                .filter(li => li.offsetParent !== null && li.innerText?.trim().length > 1)
+                .map(li => ({
+                    name: li.innerText?.trim(),
+                    isClickable: true,
+                }));
 
             return { artifacts };
         } catch (e) { return { error: e.toString(), artifacts: [] }; }

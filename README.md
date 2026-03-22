@@ -33,6 +33,7 @@ L'application agit comme un proxy intelligent :
 - **Frontend (ES Modules)** : Interface découpée en modules indépendants (`public/js/`) — seuls les 2 derniers messages (user + agent) sont affichés.
 - **Fix New Chat** : Support complet de la page "Nouvelle Conversation" (DOM vide) et envoi de message.
 - **Extraction Intelli** : Capture des blocs tâches, réflexions et messages directes de l'agent.
+- **Artefacts & Commentaires** : Visualisation des artefacts Antigravity (Implementation Plan, Task, Walkthrough) avec rendu markdown fidèle et ajout de commentaires CDP bidirectionnels.
 
 ## 5. # Principaux résultats
 | Feature | État | Source de vérité |
@@ -41,6 +42,7 @@ L'application agit comme un proxy intelligent :
 | Chat History | ✅ Enrichi | Agent Manager CDP |
 | Project Selector | ✅ Stable | Agent Manager CDP |
 | Mode/Model Sync | ✅ Stable | Agent Manager CDP |
+| Artifacts Viewer | ✅ Nouveau | Agent Manager CDP |
 
 ## 6. # Documentation Index
 | Titre (Lien) | Description |
@@ -61,7 +63,7 @@ L'application agit comme un proxy intelligent :
 │       ├── routes.js     # API REST (Express)
 │       └── ws.js         # WebSockets
 ├── public/
-│   └── js/               # Frontend modulaire (ESM)
+│   └── js/               # Frontend modulaire (ESM: main, chat, ui, history, projects, picker, artifacts)
 ├── docs/                 # Documentation détaillée et spécifications
 ├── scripts/              # Utilitaires Node.js (dont generate_ssl.js)
 ├── startup_scripts/      # Scripts de lancement (.bat, .sh, launcher.py)
@@ -107,6 +109,7 @@ L'application agit comme un proxy intelligent :
 | 21 | **Refactoring Commandes CDP (No-Fallback)** | ✅ Fait | [refactor-cdp-controls-nofallback.md](docs/tasks/refactor-cdp-controls-nofallback.md) |
 | 22 | **Auto-fermeture des scripts** | ✅ Fait | [auto-close-startup-scripts.md](docs/tasks/auto-close-startup-scripts.md) |
 | 23 | **Fix Sélection Workflow** | ✅ Fait | [fix-workflow-selection.md](docs/tasks/fix-workflow-selection.md) |
+| 24 | **Artefacts & Commentaires** | ✅ Fait | [artifacts-viewer.md](docs/tasks/artifacts-viewer.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

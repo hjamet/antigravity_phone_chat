@@ -137,12 +137,30 @@ function getMessageHash(msg) {
         msg.title || '',
         (msg.content || '').substring(0, 80),
         String(msg.allStatuses?.length || 0),
+        (msg.artifactRefs || []).join(','),
     ].join(':');
     let hash = 0;
     for (let i = 0; i < s.length; i++) {
         hash = Math.imul(31, hash) + s.charCodeAt(i) | 0;
     }
     return hash.toString();
+}
+
+/**
+ * Build inline artifact reference cards HTML
+ */
+function buildArtifactRefsHtml(refs) {
+    if (!refs || refs.length === 0) return '';
+    const unique = [...new Set(refs)];
+    return '<div class="artifact-refs">' + unique.map(name => {
+        const safeName = escapeHtml(name);
+        const encodedName = encodeURIComponent(name);
+        return `<button class="artifact-ref-btn" onclick="window._openArtifact && window._openArtifact('${encodedName}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span>${safeName}</span>
+            <span class="artifact-ref-action">Open</span>
+        </button>`;
+    }).join('') + '</div>';
 }
 
 /**
@@ -173,6 +191,8 @@ function buildMessageInner(msg) {
         return formatMarkdown(m.content);
     };
 
+    const refsHtml = buildArtifactRefsHtml(msg.artifactRefs);
+
     if (msg.role === 'user') {
         return `<div class="msg-label">You</div><div class="msg-body">${formatMarkdown(msg.content)}</div>`;
     } else if (msg.type === 'taskBlock') {
@@ -190,10 +210,11 @@ function buildMessageInner(msg) {
             html += '</div>';
         }
         html += paragraphHtml;
+        html += refsHtml;
         
         return html;
     } else {
-        return `<div class="msg-label">Agent</div><div class="msg-body">${renderContent(msg)}</div>`;
+        return `<div class="msg-label">Agent</div><div class="msg-body">${renderContent(msg)}</div>${refsHtml}`;
     }
 }
 

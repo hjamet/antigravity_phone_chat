@@ -22,7 +22,7 @@ echo ===================================================
 echo.
 
 echo [STARTING] Launching Antigravity with debug port 9000...
-start "" antigravity --remote-debugging-port=9000 2>nul
+start "" cmd /c "antigravity --remote-debugging-port=9000 2>nul"
 <nul set /p="[INFO] Waiting for editor to become ready..."
 ping 127.0.0.1 -n 6 >nul
 echo Done.

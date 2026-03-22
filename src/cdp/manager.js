@@ -18,7 +18,11 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                 .filter(el => el.scrollHeight > 100 && el.offsetWidth > 200)
                 .sort((a,b) => b.scrollHeight - a.scrollHeight)[0];
             
-            if (!chatScroll) throw new Error('[CDP] Selector broken: SEL.chat.scrollContainer — chat scroll area not found');
+            if (!chatScroll) {
+                // If no scroll container, we might be on a "New Chat" page with no messages yet.
+                // This is normal. Return empty messages instead of throwing error.
+                return { messages: [], isFull: false, isStreaming: false, scrollInfo: { scrollTop: 0, scrollHeight: 0, clientHeight: 0 } };
+            }
             
             const originalScroll = chatScroll.scrollTop;
             const scrollHeight = chatScroll.scrollHeight;

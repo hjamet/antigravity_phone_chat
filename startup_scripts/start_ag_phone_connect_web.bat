@@ -71,7 +71,7 @@ echo [INFO] .env configuration found.
 
 :: 6. Launch Antigravity
 echo [INFO] Starting Antigravity with debug port 9000...
-start "" antigravity --remote-debugging-port=9000
+start "" antigravity --remote-debugging-port=9000 2>nul
 <nul set /p="[INFO] Waiting for editor to become ready..."
 ping 127.0.0.1 -n 6 >nul
 echo Done.
@@ -89,7 +89,7 @@ if "%ERRORLEVEL%" neq "0" (
 :: 7. Launch everything via Python
 echo [1/1] Launching Antigravity Phone Connect...
 echo (This will start both the server and the Cloudflare tunnel)
-python startup_scripts/launcher.py --mode web
+start "" python startup_scripts/launcher.py --mode web
 
 :: 7. Auto-close when done
 exit

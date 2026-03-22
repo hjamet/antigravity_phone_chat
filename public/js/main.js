@@ -9,6 +9,7 @@ import { sendMessage, stopGeneration, scrollToBottom } from './chat.js?v=10';
 import { loadHistory, startNewChat } from './history.js?v=10';
 import { loadProjects } from './projects.js?v=10';
 import { fetchWithAuth } from './api.js?v=10';
+import { initPicker, onTriggerChar, hidePicker, isPickerVisible, getWorkflowPrefix, clearWorkflow } from './picker.js?v=11';
 
 /**
  * Poll /api/chat-state and render.
@@ -96,12 +97,42 @@ async function init() {
     setInterval(pollChatState, 1000);
 
     // 4. Attach Event Listeners
-    elements.sendBtn?.addEventListener('click', () => sendMessage(elements.chatInput.value));
+    elements.sendBtn?.addEventListener('click', () => {
+        if (window.isAgentStreaming) {
+            import('./chat.js?v=10').then(m => m.stopGeneration());
+        } else {
+            const prefix = getWorkflowPrefix();
+            const text = elements.chatInput.value;
+            import('./chat.js?v=10').then(m => m.sendMessage(prefix + text));
+            clearWorkflow();
+        }
+    });
     
     elements.chatInput?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            sendMessage(elements.chatInput.value);
+            if (isPickerVisible()) {
+                hidePicker();
+                return;
+            }
+            // Prepend workflow prefix if a workflow badge is active
+            const prefix = getWorkflowPrefix();
+            const text = elements.chatInput.value;
+            sendMessage(prefix + text);
+            clearWorkflow();
+        }
+        // Detect "/" for workflow picker trigger (only when input is empty)
+        if (e.key === '/') {
+            const val = elements.chatInput.value;
+            if (val.trim() === '') {
+                e.preventDefault();
+                elements.chatInput.value = '';
+                onTriggerChar();
+            }
+        }
+        // Escape closes picker
+        if (e.key === 'Escape' && isPickerVisible()) {
+            hidePicker();
         }
     });
 
@@ -110,7 +141,7 @@ async function init() {
         this.style.height = Math.min(this.scrollHeight, 150) + 'px'; // Max height limit 150px
     });
 
-    elements.stopBtn?.addEventListener('click', stopGeneration);
+
 
     document.getElementById('newChatBtn')?.addEventListener('click', async () => {
         await startNewChat();
@@ -242,6 +273,9 @@ async function init() {
     // State sync (mode, model, workspace)
     syncState();
     setInterval(syncState, 5000);
+
+    // Initialize picker
+    initPicker();
 }
 
 /**

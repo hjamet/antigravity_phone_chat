@@ -76,5 +76,14 @@ export const SELECTORS = {
     state: {
         modeLabel: 'span.text-xs.select-none',                                   // Mode text inside mode button
         workspaceHeader: 'span.text-sm.font-medium.flex-shrink-0.truncate',       // Workspace section name
+    },
+
+    // ---- Picker popups (/ and @ triggers) ----
+    picker: {
+        dialog: 'div[role="dialog"][style*="visibility: visible"]',               // Visible picker popup
+        options: 'div[role="dialog"][style*="visibility: visible"] .flex.items-center.justify-start.gap-2', // Clickable option rows
+        typeaheadList: 'div[role="listbox"][aria-label="Typeahead menu"]',         // Secondary typeahead list
+        typeaheadItem: 'div[role="listbox"][aria-label="Typeahead menu"] > div',   // Individual typeahead option
+        workflowList: '.absolute.-top-2.-translate-y-full.bg-ide-editor-background', // Workflow list overlay
     }
 };

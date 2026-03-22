@@ -263,7 +263,13 @@ export async function injectMessage(cdp, text) {
             // Trigger final input event for React
             editor.dispatchEvent(new InputEvent("input", { bubbles:true, inputType:"insertText", data: textToInsert }));
 
-            // Fallback to Enter key simulation
+            const submitBtn = document.querySelector(SEL.controls.submitButton);
+            if (submitBtn) {
+                submitBtn.click();
+                return { ok:true, method:"button_click" };
+            }
+
+            // Fallback to Enter key simulation (if button not found for some reason)
             editor.dispatchEvent(new KeyboardEvent("keydown", { bubbles:true, key:"Enter", code:"Enter" }));
             editor.dispatchEvent(new KeyboardEvent("keyup", { bubbles:true, key:"Enter", code:"Enter" }));
 
@@ -899,6 +905,220 @@ export async function selectChat(cdp, chatTitle) {
         try {
             const res = await cdp.call("Runtime.evaluate", {
                 expression: EXP,
+                returnByValue: true,
+                awaitPromise: true,
+                contextId: ctx.id
+            });
+            if (res.result?.value) return res.result.value;
+        } catch (e) {}
+    }
+    return { error: 'Context failed' };
+}
+
+/**
+ * Trigger the "/" or "@" picker by typing the character into the editor.
+ * Auto-navigates to the relevant sub-menu (Workflows for "/", Mentions for "@")
+ * and returns the list of sub-items directly.
+ * @param {Object} cdp CDP connection
+ * @param {string} char The trigger character ("/" or "@")
+ */
+export async function triggerPicker(cdp, char) {
+    if (!cdp || !cdp.ws || cdp.ws.readyState !== 1) return { error: 'No CDP connection' };
+    if (char !== '/' && char !== '@') return { error: 'Invalid trigger char, must be "/" or "@"' };
+
+    const safeChar = JSON.stringify(char);
+    // "/" → click "Workflows" (index 2), "@" → click "Mentions" (index 1)
+    const targetIndex = char === '/' ? 2 : 1;
+
+    const EXPRESSION = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
+        const editor = document.querySelector(SEL.controls.editor);
+        if (!editor) throw new Error('[CDP] Selector broken: "' + SEL.controls.editor + '" \u2014 not found in triggerPicker()');
+
+        editor.focus();
+        // Clear existing content
+        document.execCommand("selectAll", false, null);
+        document.execCommand("delete", false, null);
+        await new Promise(r => setTimeout(r, 100));
+
+        // Insert trigger char via execCommand (React detects this natively).
+        // Do NOT dispatch an extra InputEvent — execCommand fires one internally.
+        document.execCommand("insertText", false, ${safeChar});
+
+        // Wait for picker dialog to appear
+        await new Promise(r => setTimeout(r, 1000));
+
+        const dialog = document.querySelector(SEL.picker.dialog);
+        if (!dialog) throw new Error('[CDP] Selector broken: "' + SEL.picker.dialog + '" — picker did not appear in triggerPicker()');
+
+        // Auto-click the Workflows category
+        const categoryBtns = dialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
+        const targetBtn = categoryBtns[${targetIndex}];
+        if (!targetBtn) throw new Error('[CDP] Category index ${targetIndex} not found. Only ' + categoryBtns.length + ' categories.');
+
+        targetBtn.click();
+
+        // Retry loop: wait for the workflow overlay to appear
+        let items = null;
+        for (let attempt = 0; attempt < 6; attempt++) {
+            await new Promise(r => setTimeout(r, 400));
+
+            const workflowList = document.querySelector(SEL.picker.workflowList);
+            if (workflowList && workflowList.children.length > 0) {
+                const found = [];
+                Array.from(workflowList.children).forEach((child, i) => {
+                    const text = child.innerText?.trim() || '';
+                    if (text) found.push({ index: found.length, label: text, domIndex: i });
+                });
+                if (found.length > 0) { items = { ok: true, type: 'workflow', items: found }; break; }
+            }
+        }
+
+        // Do NOT clear the editor — leave the "/" and let the workflow selection
+        // insert a BeautifulMention in the Agent Manager editor naturally.
+
+        return items || { ok: true, type: 'empty', items: [] };
+    })()`;
+
+    for (const ctx of cdp.contexts) {
+        try {
+            const res = await cdp.call("Runtime.evaluate", {
+                expression: EXPRESSION,
+                returnByValue: true,
+                awaitPromise: true,
+                contextId: ctx.id
+            });
+            if (res.result?.value) return res.result.value;
+        } catch (e) {}
+    }
+    return { error: 'Context failed' };
+}
+
+/**
+ * Select an option from the visible picker dialog by index.
+ * After selection, waits and captures any secondary list (typeahead).
+ * @param {Object} cdp CDP connection
+ * @param {number} index Index of the option to click
+ */
+export async function selectPickerOption(cdp, index) {
+    if (!cdp || !cdp.ws || cdp.ws.readyState !== 1) return { error: 'No CDP connection' };
+
+    const EXPRESSION = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
+
+        const dialog = document.querySelector(SEL.picker.dialog);
+        if (!dialog) throw new Error('[CDP] Selector broken: "' + SEL.picker.dialog + '" — picker not visible in selectPickerOption()');
+
+        const optionEls = dialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
+        const target = optionEls[${Number(index)}];
+        if (!target) throw new Error('[CDP] Option index ${index} not found in selectPickerOption(). Only ' + optionEls.length + ' options available.');
+
+        target.click();
+        await new Promise(r => setTimeout(r, 1500));
+
+        // Check for typeahead list (secondary options)
+        const typeahead = document.querySelector(SEL.picker.typeaheadList);
+        if (typeahead && typeahead.children.length > 0) {
+            const items = Array.from(typeahead.children).map((el, i) => ({
+                index: i,
+                label: el.innerText?.trim() || '',
+                html: el.outerHTML.substring(0, 500)
+            }));
+            return { ok: true, type: 'typeahead', items };
+        }
+
+        // Check for a new visible dialog (some pickers replace the dialog)
+        const newDialog = document.querySelector(SEL.picker.dialog);
+        if (newDialog && newDialog !== dialog) {
+            const newOpts = newDialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
+            const items = Array.from(newOpts).map((el, i) => ({
+                index: i,
+                label: el.innerText?.trim() || '',
+            }));
+            return { ok: true, type: 'dialog', items };
+        }
+
+        return { ok: true, type: 'direct', items: [] };
+    })()`;
+
+    for (const ctx of cdp.contexts) {
+        try {
+            const res = await cdp.call("Runtime.evaluate", {
+                expression: EXPRESSION,
+                returnByValue: true,
+                awaitPromise: true,
+                contextId: ctx.id
+            });
+            if (res.result?.value) return res.result.value;
+        } catch (e) {}
+    }
+    return { error: 'Context failed' };
+}
+
+/**
+ * Select an item from the typeahead list by index, then submit.
+ * @param {Object} cdp CDP connection
+ * @param {number} index Index of the typeahead item to click
+ */
+export async function selectTypeaheadItem(cdp, index) {
+    if (!cdp || !cdp.ws || cdp.ws.readyState !== 1) return { error: 'No CDP connection' };
+
+    const EXPRESSION = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
+
+        const typeahead = document.querySelector(SEL.picker.typeaheadList);
+        if (!typeahead) throw new Error('[CDP] Selector broken: "' + SEL.picker.typeaheadList + '" — not found in selectTypeaheadItem()');
+
+        const items = typeahead.children;
+        if (${Number(index)} >= items.length) throw new Error('[CDP] Typeahead index ${index} out of range. Only ' + items.length + ' items.');
+
+        items[${Number(index)}].click();
+        await new Promise(r => setTimeout(r, 500));
+
+        return { ok: true };
+    })()`;
+
+    for (const ctx of cdp.contexts) {
+        try {
+            const res = await cdp.call("Runtime.evaluate", {
+                expression: EXPRESSION,
+                returnByValue: true,
+                awaitPromise: true,
+                contextId: ctx.id
+            });
+            if (res.result?.value) return res.result.value;
+        } catch (e) {}
+    }
+    return { error: 'Context failed' };
+}
+
+/**
+ * Select a workflow item from the workflow list overlay by DOM child index.
+ * @param {Object} cdp CDP connection
+ * @param {number} domIndex DOM child index in the workflow list overlay
+ */
+export async function selectWorkflowItem(cdp, domIndex) {
+    if (!cdp || !cdp.ws || cdp.ws.readyState !== 1) return { error: 'No CDP connection' };
+
+    const EXPRESSION = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
+
+        const workflowList = document.querySelector(SEL.picker.workflowList);
+        if (!workflowList) throw new Error('[CDP] Selector broken: "' + SEL.picker.workflowList + '" — not found in selectWorkflowItem()');
+
+        const target = workflowList.children[${Number(domIndex)}];
+        if (!target) throw new Error('[CDP] Workflow domIndex ${domIndex} not found in selectWorkflowItem(). Only ' + workflowList.children.length + ' children.');
+
+        target.click();
+        await new Promise(r => setTimeout(r, 500));
+
+        return { ok: true };
+    })()`;
+
+    for (const ctx of cdp.contexts) {
+        try {
+            const res = await cdp.call("Runtime.evaluate", {
+                expression: EXPRESSION,
                 returnByValue: true,
                 awaitPromise: true,
                 contextId: ctx.id

@@ -59,7 +59,8 @@ export async function sendMessage(text) {
         console.error('Failed to send message:', e);
     } finally {
         isSending = false;
-        elements.sendBtn.disabled = false;
+        // Don't blindly re-enable the button — let the UI state sync handle it
+        // since it might have become a stop button.
     }
 }
 

@@ -260,6 +260,27 @@ function updateStreamingIndicator(isStreaming) {
             indicator.classList.remove('active');
         }
     }
+
+    // Toggle Send/Stop button state
+    if (elements.sendBtn) {
+        if (isStreaming) {
+            elements.sendBtn.classList.add('is-stopping');
+            elements.sendBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" class="stop-icon">
+                    <rect x="6" y="6" width="12" height="12"></rect>
+                </svg>
+            `;
+        } else {
+            elements.sendBtn.classList.remove('is-stopping');
+            elements.sendBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            `;
+            elements.sendBtn.disabled = false;
+        }
+    }
 }
 
 /**

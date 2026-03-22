@@ -301,6 +301,36 @@ export function setupRoutes(app, {
         res.json(chatHistoryService.getChatState());
     });
 
+    // --- Picker (Workflow & Mention) ---
+
+    router.post('/api/picker/trigger', async (req, res) => {
+        const { char } = req.body;
+        if (char !== '/' && char !== '@') return res.status(400).json({ error: 'char must be "/" or "@"' });
+        const result = await managerCdp.triggerPicker(cdpConnections.manager, char);
+        res.json(result);
+    });
+
+    router.post('/api/picker/select', async (req, res) => {
+        const { index } = req.body;
+        if (index === undefined) return res.status(400).json({ error: 'index required' });
+        const result = await managerCdp.selectPickerOption(cdpConnections.manager, index);
+        res.json(result);
+    });
+
+    router.post('/api/picker/typeahead-select', async (req, res) => {
+        const { index } = req.body;
+        if (index === undefined) return res.status(400).json({ error: 'index required' });
+        const result = await managerCdp.selectTypeaheadItem(cdpConnections.manager, index);
+        res.json(result);
+    });
+
+    router.post('/api/picker/select-workflow', async (req, res) => {
+        const { index } = req.body;
+        if (index === undefined) return res.status(400).json({ error: 'index required' });
+        const result = await managerCdp.selectWorkflowItem(cdpConnections.manager, index);
+        res.json(result);
+    });
+
     // Use router
     app.use('/', router);
 }

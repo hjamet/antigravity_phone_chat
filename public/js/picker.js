@@ -106,11 +106,23 @@ function renderItems(items) {
 
 /**
  * User selected a workflow — show badge and close picker.
+ * Also triggers the actual selection in Agent Manager via CDP.
  */
-function selectWorkflow(name) {
-    selectedWorkflow = { name };
+async function selectWorkflow(name, domIndex) {
+    selectedWorkflow = { name, domIndex };
     renderBadge();
     hidePicker();
+
+    // Click the workflow in AgentManager via CDP
+    try {
+        await fetchWithAuth('/api/picker/select-workflow', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ index: domIndex })
+        });
+    } catch (e) {
+        console.error('Workflow CDP click failed:', e);
+    }
 }
 
 /**

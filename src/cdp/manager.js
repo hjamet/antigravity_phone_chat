@@ -264,8 +264,8 @@ export async function injectMessage(cdp, text) {
                 }
                 if (i < lines.length - 1) document.execCommand("insertLineBreak");
             }
-            // Trigger final input event for React
-            editor.dispatchEvent(new InputEvent("input", { bubbles:true, inputType:"insertText", data: textToInsert }));
+            // Allow React to process the editor state change before clicking submit
+            await new Promise(r => setTimeout(r, 150));
 
             const submitBtn = document.querySelector(SEL.controls.submitButton);
             if (submitBtn) {

@@ -139,6 +139,12 @@ async function init() {
     elements.chatInput?.addEventListener('input', function() {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 150) + 'px'; // Max height limit 150px
+        
+        // If a workflow is selected and user clears the input (deleted the slash),
+        // remove the workflow badge
+        if (getWorkflowPrefix() && this.value.trim() === '') {
+            clearWorkflow();
+        }
     });
 
 
@@ -147,6 +153,19 @@ async function init() {
         await startNewChat();
         setTimeout(pollChatState, 500);
     });
+
+    // Reset the UI when a new chat is started
+    window.addEventListener('new-chat-started', () => {
+        // Clear all chat messages from the display
+        if (elements.chatContent) {
+            elements.chatContent.querySelectorAll('.chat-msg').forEach(el => el.remove());
+        }
+        // Reset polling cache so the next poll triggers a full re-render
+        _lastPollJson = '';
+        // Clear any pending user message
+        window.pendingUserMessage = undefined;
+    });
+
     
     document.getElementById('historyBtn')?.addEventListener('click', async () => {
         toggleLayer(elements.historyLayer, true);

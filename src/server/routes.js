@@ -183,8 +183,20 @@ export function setupRoutes(app, {
     // ... End of route list ...
 
     router.post('/new-chat', async (req, res) => {
-        const result = await managerCdp.startNewChat(cdpConnections.manager);
-        res.json(result);
+        // Use the same mechanism as /api/projects/open — this is proven to work.
+        // 1. Get current workspace name from app state
+        const state = await managerCdp.getAppState(cdpConnections.manager);
+        const workspace = state?.workspace;
+        if (!workspace) {
+            return res.json({ error: 'Cannot determine current workspace. Open a project first.' });
+        }
+        // 2. Open the project (same as select-project) — this creates a new conversation
+        const result = await managerCdp.openProject(cdpConnections.manager, { name: workspace });
+        if (result) {
+            res.json({ success: true, method: 'open_project', workspace });
+        } else {
+            res.json({ error: 'Failed to open project for new chat' });
+        }
     });
 
     router.get('/chat-history', async (req, res) => {

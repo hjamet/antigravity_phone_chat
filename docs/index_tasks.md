@@ -24,3 +24,4 @@
 | [Refonte Extraction Chat (No-Fallback)](tasks/refactor-chat-extraction-selectors.md) | Migration de `captureSnapshot` vers des CSS Selectors stricts sans heuristiques textuelles | 2026-03-20 | `Up to date` |
 | [Refactoring Commandes CDP (No-Fallback)](tasks/refactor-cdp-controls-nofallback.md) | Migration de toutes les commandes CDP vers des CSS Selectors stricts sans heuristiques textuelles | 2026-03-20 | `Up to date` |
 | [Auto-fermeture des scripts](tasks/auto-close-startup-scripts.md) | Détachement du terminal et suppression d'avertissements au démarrage | 2026-03-22 | `Up to date` |
+| [Fix Workflow Selection](tasks/fix-workflow-selection.md) | Synchronisation du clic CDP et nettoyage auto du badge workflow | 2026-03-22 | `Up to date` |

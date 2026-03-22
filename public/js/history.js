@@ -128,7 +128,15 @@ export async function selectChat(title) {
  */
 export async function startNewChat() {
     try {
-        await fetchWithAuth('/new-chat', { method: 'POST' });
+        const res = await fetchWithAuth('/new-chat', { method: 'POST' });
+        const data = await res.json();
+        if (data.error) {
+            console.error('New chat error:', data.error);
+            alert(data.error);
+            return;
+        }
+        // Reset the frontend UI for a fresh conversation
+        window.dispatchEvent(new CustomEvent('new-chat-started'));
     } catch (e) {
         console.error('New chat error:', e);
     }

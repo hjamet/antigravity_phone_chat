@@ -237,6 +237,11 @@ async function init() {
         await loadArtifacts();
     });
     
+    // Refresh button (Hard reload)
+    document.getElementById('refreshBtn')?.addEventListener('click', () => {
+        window.location.reload(true);
+    });
+    
     // Remote Scroll controls (Touch & Wheel)
     let lastScrollY = 0;
     let scrollTimeout = null;

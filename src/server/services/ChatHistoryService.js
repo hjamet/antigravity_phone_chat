@@ -81,8 +81,7 @@ export class ChatHistoryService {
                 console.log('✅ UI Transition complete. Resuming snapshot processing.');
             }
         }
-            return { hasChanged: false, error: snapshot?.error || 'Invalid snapshot' };
-        }
+
 
         const validation = snapshotSchema.safeParse(snapshot);
         if (!validation.success) {

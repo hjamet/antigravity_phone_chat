@@ -34,6 +34,7 @@ L'application agit comme un proxy intelligent :
 - **Fix New Chat** : Support complet de la page "Nouvelle Conversation" (DOM vide) et envoi de message.
 - **Extraction Intelli** : Capture des blocs tâches, réflexions et messages directes de l'agent.
 - **Artefacts & Commentaires** : Visualisation des artefacts Antigravity (Implementation Plan, Task, Walkthrough) avec rendu markdown fidèle et ajout de commentaires CDP bidirectionnels.
+- **Smart Scrolling** : Scroll forcé dans l'Agent Manager (CDP). Interface web avec auto-scroll intelligent (seulement si en bas) et notification toast « ✅ Réponse reçue » à la fin du streaming.
 
 ## 5. # Principaux résultats
 | Feature | État | Source de vérité |
@@ -43,6 +44,7 @@ L'application agit comme un proxy intelligent :
 | Project Selector | ✅ Stable | Agent Manager CDP |
 | Mode/Model Sync | ✅ Stable | Agent Manager CDP |
 | Artifacts Viewer | ✅ Nouveau | Agent Manager CDP |
+| Smart Scrolling & Notifications | ✅ Nouveau | CDP + Frontend |
 
 ## 6. # Documentation Index
 | Titre (Lien) | Description |
@@ -110,6 +112,7 @@ L'application agit comme un proxy intelligent :
 | 22 | **Auto-fermeture des scripts** | ✅ Fait | [auto-close-startup-scripts.md](docs/tasks/auto-close-startup-scripts.md) |
 | 23 | **Fix Sélection Workflow** | ✅ Fait | [fix-workflow-selection.md](docs/tasks/fix-workflow-selection.md) |
 | 24 | **Artefacts & Commentaires** | ✅ Fait | [artifacts-viewer.md](docs/tasks/artifacts-viewer.md) |
+| 25 | **Fix Erreur Syntaxe Démarrage** | ✅ Fait | [fix-startup-syntax-error.md](docs/tasks/fix-startup-syntax-error.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

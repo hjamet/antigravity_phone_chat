@@ -188,4 +188,10 @@ export function initArtifacts() {
         if (layer) layer.classList.remove('show');
     };
     window.closeArtifactViewer = closeArtifactViewer;
+
+    // Global handler for inline artifact ref buttons in chat messages
+    window._openArtifact = (encodedName) => {
+        const name = decodeURIComponent(encodedName);
+        openArtifactViewer(name);
+    };
 }

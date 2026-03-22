@@ -59,7 +59,7 @@ export function renderChatState(state) {
     }
     
     // Check if user is near the bottom before update
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
     
     // Remove initial loading state on first render
     const loadingEls = container.querySelectorAll('.loading-state');
@@ -110,7 +110,9 @@ export function renderChatState(state) {
 
     // Only auto-scroll if something changed AND user was near the bottom
     if (anyChanged && isNearBottom) {
-        container.scrollTop = container.scrollHeight;
+        requestAnimationFrame(() => {
+            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+        });
     }
     
     return container;

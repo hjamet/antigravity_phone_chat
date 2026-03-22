@@ -19,6 +19,27 @@ import { loadArtifacts, initArtifacts } from './artifacts.js?v=1';
  * when the backend has nothing new, which eliminates flickering completely.
  */
 let _lastPollJson = '';
+let _wasStreaming = false;
+
+/**
+ * Show a toast notification when the agent finishes responding
+ */
+function showCompletionToast() {
+    // Avoid duplicate toasts
+    if (document.getElementById('completionToast')) return;
+    const toast = document.createElement('div');
+    toast.id = 'completionToast';
+    toast.className = 'completion-toast';
+    toast.textContent = '✅ Réponse reçue';
+    document.body.appendChild(toast);
+    // Trigger enter animation on next frame
+    requestAnimationFrame(() => toast.classList.add('show'));
+    // Auto-dismiss after 4 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+    }, 4000);
+}
 
 async function pollChatState() {
     try {
@@ -32,7 +53,14 @@ async function pollChatState() {
         const data = JSON.parse(text);
         if (data && !data.error) {
             renderChatState(data);
-            if (!data.isStreaming) window.dispatchEvent(new Event('agent-stopped-streaming'));
+            if (!data.isStreaming) {
+                window.dispatchEvent(new Event('agent-stopped-streaming'));
+                // Show completion toast only on real streaming→idle transition
+                if (_wasStreaming) {
+                    showCompletionToast();
+                }
+            }
+            _wasStreaming = data.isStreaming;
         }
     } catch (e) {
         // Server unreachable — silent fail, will retry next tick

@@ -164,6 +164,8 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
             }
             
             extractVisible();
+            // Force scroll to bottom so we never miss messages in Agent Manager
+            chatScroll.scrollTop = chatScroll.scrollHeight;
             const isStreaming = wrapper ? !!wrapper.querySelector(SEL.chat.streamingIndicator) : false;
             return { messages: collected, isFull: false, isStreaming, scrollInfo: { scrollTop: chatScroll.scrollTop, scrollHeight, clientHeight } };
         } catch(e) { return { error: e.toString() }; }

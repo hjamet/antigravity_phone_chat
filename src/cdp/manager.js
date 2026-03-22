@@ -5,6 +5,61 @@
 
 import { SELECTORS } from '../config/selectors.js';
 
+import fs from 'fs';
+import path from 'path';
+
+/**
+ * Exécute un script CDP et gère les dumps DOM en cas d'erreur de sélecteur.
+ */
+async function runCdpScript(cdp, expression, functionName = 'Unknown') {
+    if (!cdp) return { error: 'Not connected' };
+    
+    for (const ctx of cdp.contexts) {
+        try {
+            const res = await cdp.call("Runtime.evaluate", {
+                expression,
+                returnByValue: true,
+                awaitPromise: true,
+                contextId: ctx.id
+            });
+            
+            if (res.result?.value) {
+                const val = res.result.value;
+                if (val.error && val.domDump) {
+                    const dumpDir = path.join(process.cwd(), 'debug');
+                    if (!fs.existsSync(dumpDir)) fs.mkdirSync(dumpDir, { recursive: true });
+                    const dumpPath = path.join(dumpDir, 'crash_dom.html');
+                    fs.writeFileSync(dumpPath, val.domDump, 'utf8');
+                    
+                    console.error(`
+❌ [CRASH SILENCIEUX ÉVITÉ] Erreur CDP dans la fonction: ${functionName}()`);
+                    console.error(`   Message: ${val.error}`);
+                    if (val.lastValidRoot) {
+                        console.error(`   Dernière racine commune trouvée (Extrait):
+     ${val.lastValidRoot.trim()}`);
+                    }
+                    console.error(`
+   👉 Fichier DOM complet généré pour consultation : ${dumpPath}
+`);
+                    
+                    delete val.domDump;
+                    delete val.lastValidRoot;
+                    return val;
+                }
+                
+                // Si pas d'erreur ou erreur sans domDump
+                if (!val.error || val.messages || val.models) return val; 
+                if (val.error) return val; // Return the error correctly
+            }
+        } catch (e) {
+            // Le contexte a échoué
+        }
+    }
+    return { error: 'Target unavailable or context failed' };
+}
+
+
+
 /**
  * Capture a snapshot of the current chat UI from the Manager
  */
@@ -14,6 +69,7 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
     const CAPTURE_SCRIPT = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
+            let lastValidRoot = document.body;
             const chatScroll = Array.from(document.querySelectorAll(SEL.chat.scrollContainer))
                 .filter(el => el.scrollHeight > 100 && el.offsetWidth > 200)
                 .sort((a,b) => b.scrollHeight - a.scrollHeight)[0];
@@ -29,9 +85,11 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
             const clientHeight = chatScroll.clientHeight;
             const wrapper = chatScroll.children[0];
             if (!wrapper) throw new Error('[CDP] Chat wrapper not found');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = wrapper;
             
             const inner = wrapper.children[0];
             if (!inner) throw new Error('[CDP] Chat inner div not found');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = inner;
             
             const turnsDiv = inner.querySelector(SEL.chat.turnsContainer) || inner;
             
@@ -174,31 +232,10 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
 
             const isStreaming = wrapper ? !!wrapper.querySelector(SEL.chat.streamingIndicator) : false;
             return { messages: collected, isFull: false, isStreaming, availableArtifacts, scrollInfo: { scrollTop: chatScroll.scrollTop, scrollHeight, clientHeight } };
-        } catch(e) { return { error: e.toString() }; }
+        } catch(e) {     return {         error: e.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
-    for (const ctx of cdp.contexts) {
-        try {
-            const result = await cdp.call("Runtime.evaluate", {
-                expression: CAPTURE_SCRIPT,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-
-            if (result.exceptionDetails) {
-                console.error("[CDP Script Exception]", result.exceptionDetails.exception?.description || result.exceptionDetails);
-                continue;
-            }
-
-            if (result.result && result.result.value && !result.result.value.error) {
-                return result.result.value;
-            } else if (result.result?.value?.error) {
-                console.error("[CDP Error]", result.result.value.error);
-            }
-        } catch (e) {
-            console.error("[CDP Exception]", e);
-        }
-    }
+    const val = await runCdpScript(cdp, CAPTURE_SCRIPT, 'captureSnapshot');
+    if (val && !val.error) return val;
     return null;
 }
 
@@ -210,15 +247,19 @@ export async function getAvailableModels(cdp) {
     const EXP = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
+            let lastValidRoot = document.body;
             const inputBox = document.querySelector(SEL.controls.inputBox);
             if (!inputBox) throw new Error('[CDP] Selector broken: "' + SEL.controls.inputBox + '" — not found in getAvailableModels()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = inputBox;
 
             // Find the model clickable element inside the controls row
             const controlsRow = inputBox.querySelector(SEL.controls.controlsRow);
             if (!controlsRow) throw new Error('[CDP] Selector broken: "' + SEL.controls.controlsRow + '" — not found in getAvailableModels()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = controlsRow;
 
             const modelBtn = controlsRow.querySelector(SEL.controls.modelClickable);
             if (!modelBtn) throw new Error('[CDP] Selector broken: "' + SEL.controls.modelClickable + '" — not found in getAvailableModels()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = modelBtn;
 
             modelBtn.click();
             await new Promise(r => setTimeout(r, 600));
@@ -265,16 +306,20 @@ export async function getAvailableModels(cdp) {
  */
 export async function injectMessage(cdp, text) {
     if (!cdp) throw new Error("Not connected to Manager CDP");
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = cdp;
     const safeText = JSON.stringify(text);
 
     const EXPRESSION = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
+            let lastValidRoot = document.body;
             const inputBox = document.querySelector(SEL.controls.inputBox);
             if (!inputBox) throw new Error('[CDP] Selector broken: "' + SEL.controls.inputBox + '" — not found in injectMessage()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = inputBox;
 
             const editor = inputBox.querySelector(SEL.controls.editor);
             if (!editor) throw new Error('[CDP] Selector broken: "' + SEL.controls.editor + '" — not found in injectMessage()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = editor;
 
             const textToInsert = ${safeText};
 
@@ -282,11 +327,13 @@ export async function injectMessage(cdp, text) {
             document.execCommand?.("selectAll", false, null);
             document.execCommand?.("delete", false, null);
 
-            const lines = textToInsert.split('\\n');
+            const lines = textToInsert.split('\
+');
             for(let i=0; i<lines.length; i++) {
                 if (lines[i].length > 0) {
                     const ok = document.execCommand("insertText", false, lines[i]);
                     if (!ok) throw new Error('[CDP] execCommand("insertText") failed in injectMessage(). Update text insertion strategy.');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = ok;
                 }
                 if (i < lines.length - 1) document.execCommand("insertLineBreak");
             }
@@ -329,27 +376,17 @@ export async function stopGeneration(cdp) {
     const EXP = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
+            let lastValidRoot = document.body;
             const cancel = document.querySelector(SEL.controls.cancelButton);
             if (cancel && cancel.offsetParent !== null) {
                 cancel.click();
                 return { success: true };
             }
             return { error: 'No active generation found' };
-        } catch(e) { return { error: e.toString() }; }
+        } catch(e) {     return {         error: e.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Context failed' };
+    return await runCdpScript(cdp, EXP, 'stopGeneration');
 }
 
 /**
@@ -361,11 +398,13 @@ export async function remoteScroll(cdp, deltaY) {
     const EXP = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
+            let lastValidRoot = document.body;
             const chatScroll = Array.from(document.querySelectorAll(SEL.chat.scrollContainer))
                 .filter(el => el.scrollHeight > 100 && el.offsetWidth > 200)
                 .sort((a,b) => b.scrollHeight - a.scrollHeight)[0];
                 
             if (!chatScroll) throw new Error('[CDP] Selector broken: "' + SEL.chat.scrollContainer + '" — not found in remoteScroll()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = chatScroll;
             
             chatScroll.scrollBy({ top: ${deltaY}, behavior: 'smooth' });
             
@@ -374,21 +413,10 @@ export async function remoteScroll(cdp, deltaY) {
                 scrollTop: chatScroll.scrollTop, 
                 scrollHeight: chatScroll.scrollHeight 
             };
-        } catch(e) { return { error: e.toString() }; }
+        } catch(e) {     return {         error: e.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Scroll failed' };
+    return await runCdpScript(cdp, EXP, 'remoteScroll');
 }
 
 /**
@@ -400,16 +428,20 @@ export async function setMode(cdp, modeText) {
     const EXP = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
+            let lastValidRoot = document.body;
             const mode = ${JSON.stringify(modeText)};
             const inputBox = document.querySelector(SEL.controls.inputBox);
             if (!inputBox) throw new Error('[CDP] Selector broken: "' + SEL.controls.inputBox + '" — not found in setMode()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = inputBox;
 
             const controlsRow = inputBox.querySelector(SEL.controls.controlsRow);
             if (!controlsRow) throw new Error('[CDP] Selector broken: "' + SEL.controls.controlsRow + '" — not found in setMode()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = controlsRow;
 
             // Read current mode from the mode button label
             const modeBtn = controlsRow.querySelector(SEL.controls.modeButton);
             if (!modeBtn) throw new Error('[CDP] Selector broken: "' + SEL.controls.modeButton + '" — not found in setMode()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = modeBtn;
 
             const currentMode = (modeBtn.innerText || '').trim();
             if (currentMode === mode) return { success: true, alreadySet: true };
@@ -433,21 +465,10 @@ export async function setMode(cdp, modeText) {
 
             target.click();
             return { success: true };
-        } catch(err) { return { error: err.toString() }; }
+        } catch(err) {     return {         error: err.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Context failed' };
+    return await runCdpScript(cdp, EXP, 'setMode');
 }
 
 /**
@@ -458,15 +479,19 @@ export async function setModel(cdp, modelText) {
     const EXP = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
+            let lastValidRoot = document.body;
             const model = ${JSON.stringify(modelText)};
             const inputBox = document.querySelector(SEL.controls.inputBox);
             if (!inputBox) throw new Error('[CDP] Selector broken: "' + SEL.controls.inputBox + '" — not found in setModel()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = inputBox;
 
             const controlsRow = inputBox.querySelector(SEL.controls.controlsRow);
             if (!controlsRow) throw new Error('[CDP] Selector broken: "' + SEL.controls.controlsRow + '" — not found in setModel()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = controlsRow;
 
             const modelBtn = controlsRow.querySelector(SEL.controls.modelClickable);
             if (!modelBtn) throw new Error('[CDP] Selector broken: "' + SEL.controls.modelClickable + '" — not found in setModel()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = modelBtn;
 
             modelBtn.click();
             await new Promise(r => setTimeout(r, 600));
@@ -495,21 +520,10 @@ export async function setModel(cdp, modelText) {
             row.scrollIntoView({block: 'center'});
             row.click();
             return { success: true };
-        } catch(err) { return { error: err.toString() }; }
+        } catch(err) {     return {         error: err.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Context failed' };
+    return await runCdpScript(cdp, EXP, 'setModel');
 }
 
 /**
@@ -547,6 +561,7 @@ export async function startNewChat(cdp) {
     const EXP = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
+            let lastValidRoot = document.body;
             function simulateClick(el) {
                 const rect = el.getBoundingClientRect();
                 const x = rect.left + rect.width / 2;
@@ -570,21 +585,10 @@ export async function startNewChat(cdp) {
             if (editBtn && editBtn.offsetParent !== null) { simulateClick(editBtn); return { success: true, method: 'edit_button' }; }
 
             throw new Error('[CDP] New chat button not found — update SEL.sidebarNav selectors');
-        } catch(e) { return { error: e.toString() }; }
+        } catch(e) {     return {         error: e.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value?.success) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Context failed' };
+    return await runCdpScript(cdp, EXP, 'startNewChat');
 }
 
 /**
@@ -595,12 +599,15 @@ export async function getAppState(cdp) {
     const EXP = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
+            let lastValidRoot = document.body;
             const state = { mode: 'Unknown', model: 'Unknown' };
             const inputBox = document.querySelector(SEL.controls.inputBox);
             if (!inputBox) throw new Error('[CDP] Selector broken: "' + SEL.controls.inputBox + '" — not found in getAppState()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = inputBox;
 
             const controlsRow = inputBox.querySelector(SEL.controls.controlsRow);
             if (!controlsRow) throw new Error('[CDP] Selector broken: "' + SEL.controls.controlsRow + '" — not found in getAppState()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = controlsRow;
 
             // Read mode from the mode button
             const modeBtn = controlsRow.querySelector(SEL.controls.modeButton);
@@ -623,16 +630,10 @@ export async function getAppState(cdp) {
             if (activeWs) state.workspace = activeWs.textContent.trim();
 const pills=Array.from(document.querySelectorAll(SEL.history.conversationPill));const activePill=pills.find(p=>{const btn=p.closest('button');return btn&&(btn.classList.contains('bg-ide-editor-background')||btn.classList.contains('bg-ide-element-background')||btn.getAttribute('aria-selected')==='true')});if(activePill) state.chatTitle=activePill.textContent.trim();
 return state;
-        } catch(e) { return { error: e.toString() }; }
+        } catch(e) {     return {         error: e.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", { expression: EXP, returnByValue: true, awaitPromise: true, contextId: ctx.id });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { mode: 'Unknown', model: 'Unknown' };
+    return await runCdpScript(cdp, EXP, 'getAppState');
 }
 
 /**
@@ -650,13 +651,7 @@ export async function hasChatOpen(cdp) {
         return { hasChat: !!inputBox, hasMessages, editorFound: !!editor };
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", { expression: EXP, returnByValue: true, contextId: ctx.id });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { hasChat: false, hasMessages: false, editorFound: false };
+    return await runCdpScript(cdp, EXP, 'hasChatOpen');
 }
 
 /**
@@ -669,29 +664,20 @@ export async function clickElement(cdp, { selector, index }) {
     const safeSelector = JSON.stringify(selector);
     const EXP = `(async () => {
         try {
+            let lastValidRoot = document.body;
             const sel = ${safeSelector};
             const elements = Array.from(document.querySelectorAll(sel)).filter(el => el.offsetParent !== null);
             if (elements.length === 0) throw new Error('[CDP] Selector "' + sel + '" returned 0 visible elements in clickElement()');
             const target = elements[${index || 0}];
             if (!target) throw new Error('[CDP] Element at index ${index || 0} not found for selector "' + sel + '" (' + elements.length + ' total)');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = target;
             target.focus?.();
             target.click();
             return { success: true, found: elements.length, indexUsed: ${index || 0} };
-        } catch(e) { return { error: e.toString() }; }
+        } catch(e) {     return {         error: e.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value?.success) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Click failed' };
+    return await runCdpScript(cdp, EXP, 'clickElement');
 }
 
 /**
@@ -699,10 +685,12 @@ export async function clickElement(cdp, { selector, index }) {
  */
 export async function getChatHistory(cdp) {
     if (!cdp) throw new Error("Agent Manager not connected");
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = cdp;
 
     const EXP = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
+            let lastValidRoot = document.body;
             let pills = document.querySelectorAll(SEL.history.conversationPill);
 
             // If sidebar not open, click the history button
@@ -714,6 +702,7 @@ export async function getChatHistory(cdp) {
                     return icon && icon.textContent.trim() === SEL.sidebarNav.historyIcon;
                 });
                 if (!historyBtn) throw new Error('[CDP] Selector broken: history button not found — check SEL.sidebarNav');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = historyBtn;
 
                 historyBtn.click();
                 await new Promise(r => setTimeout(r, 1500));
@@ -754,23 +743,10 @@ export async function getChatHistory(cdp) {
             });
 
             return { success: true, chats };
-        } catch (e) {
-            return { error: e.toString(), chats: [] };
-        }
+        } catch(e) {     return {         error: e.toString(), chats: [] ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Target unavailable', chats: [] };
+    return await runCdpScript(cdp, EXP, 'getChatHistory');
 }
 
 /**
@@ -778,6 +754,7 @@ export async function getChatHistory(cdp) {
  */
 export async function listProjects(cdp) {
     if (!cdp) throw new Error("Agent Manager not connected");
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = cdp;
 
     const EXP = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
@@ -785,6 +762,7 @@ export async function listProjects(cdp) {
             // Open workspace dialog using the known button
             const btn = document.querySelector(SEL.sidebar.openWorkspaceButton);
             if (!btn) throw new Error('[CDP] Selector broken: "' + SEL.sidebar.openWorkspaceButton + '" — not found in listProjects()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = btn;
 
             btn.click();
             await new Promise(r => setTimeout(r, 600));
@@ -812,7 +790,7 @@ export async function listProjects(cdp) {
             document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 
             return { success: true, projects };
-        } catch (err) { return { error: err.toString() }; }
+        } catch(err) {     return {         error: err.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
     for (const ctx of cdp.contexts) {
@@ -834,16 +812,19 @@ export async function listProjects(cdp) {
  */
 export async function openProject(cdp, { index, name }) {
     if (!cdp) throw new Error("Agent Manager not connected");
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = cdp;
 
     const projectName = name;
     const EXP = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
+            let lastValidRoot = document.body;
             const targetName = ${JSON.stringify(projectName)};
 
             // 1. Open the Workspace menu
             const btn = document.querySelector(SEL.sidebar.openWorkspaceButton);
             if (!btn) throw new Error('[CDP] Selector broken: "' + SEL.sidebar.openWorkspaceButton + '" — not found in openProject()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = btn;
 
             btn.click();
             await new Promise(r => setTimeout(r, 600));
@@ -893,11 +874,13 @@ export async function openProject(cdp, { index, name }) {
  */
 export async function selectChat(cdp, chatTitle) {
     if (!cdp) throw new Error("Agent Manager not connected");
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = cdp;
     const safeChatTitle = JSON.stringify(chatTitle);
 
     const EXP = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
+            let lastValidRoot = document.body;
             const targetTitle = ${safeChatTitle};
 
             // Ensure history panel is open
@@ -928,21 +911,10 @@ export async function selectChat(cdp, chatTitle) {
             }
 
             return { error: 'Chat "' + targetTitle + '" not found in ' + pills.length + ' pills' };
-        } catch (e) { return { error: e.toString() }; }
+        } catch(e) {     return {         error: e.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Context failed' };
+    return await runCdpScript(cdp, EXP, 'selectChat');
 }
 
 /**
@@ -964,6 +936,7 @@ export async function triggerPicker(cdp, char) {
         const SEL = ${JSON.stringify(SELECTORS)};
         const editor = document.querySelector(SEL.controls.editor);
         if (!editor) throw new Error('[CDP] Selector broken: "' + SEL.controls.editor + '" \u2014 not found in triggerPicker()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = editor;
 
         editor.focus();
         // Clear existing content
@@ -988,6 +961,7 @@ export async function triggerPicker(cdp, char) {
         const categoryBtns = dialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
         const targetBtn = categoryBtns[${targetIndex}];
         if (!targetBtn) throw new Error('[CDP] Category index ${targetIndex} not found. Only ' + categoryBtns.length + ' categories.');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = targetBtn;
 
         targetBtn.click();
 
@@ -1013,18 +987,7 @@ export async function triggerPicker(cdp, char) {
         return items || { ok: true, type: 'empty', items: [] };
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXPRESSION,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Context failed' };
+    return await runCdpScript(cdp, EXP, 'triggerPicker');
 }
 
 /**
@@ -1046,6 +1009,7 @@ export async function selectPickerOption(cdp, index) {
         const optionEls = dialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
         const target = optionEls[${Number(index)}];
         if (!target) throw new Error('[CDP] Option index ${index} not found in selectPickerOption(). Only ' + optionEls.length + ' options available.');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = target;
 
         target.click();
         await new Promise(r => setTimeout(r, 1500));
@@ -1075,18 +1039,7 @@ export async function selectPickerOption(cdp, index) {
         return { ok: true, type: 'direct', items: [] };
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXPRESSION,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Context failed' };
+    return await runCdpScript(cdp, EXP, 'selectPickerOption');
 }
 
 /**
@@ -1102,6 +1055,7 @@ export async function selectTypeaheadItem(cdp, index) {
 
         const typeahead = document.querySelector(SEL.picker.typeaheadList);
         if (!typeahead) throw new Error('[CDP] Selector broken: "' + SEL.picker.typeaheadList + '" — not found in selectTypeaheadItem()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = typeahead;
 
         const items = typeahead.children;
         if (${Number(index)} >= items.length) throw new Error('[CDP] Typeahead index ${index} out of range. Only ' + items.length + ' items.');
@@ -1112,18 +1066,7 @@ export async function selectTypeaheadItem(cdp, index) {
         return { ok: true };
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXPRESSION,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Context failed' };
+    return await runCdpScript(cdp, EXP, 'selectTypeaheadItem');
 }
 
 /**
@@ -1143,6 +1086,7 @@ export async function selectWorkflowItem(cdp, domIndex) {
         if (!workflowList || workflowList.children.length === 0) {
             const editor = document.querySelector(SEL.controls.editor);
             if (!editor) throw new Error('[CDP] Editor not found');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = editor;
             
             editor.focus();
             document.execCommand("selectAll", false, null);
@@ -1167,9 +1111,11 @@ export async function selectWorkflowItem(cdp, domIndex) {
         }
 
         if (!workflowList) throw new Error('[CDP] Selector broken: "' + SEL.picker.workflowList + '" — not found after retry in selectWorkflowItem()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = workflowList;
 
         const wrapper = workflowList.children[${Number(domIndex)}];
         if (!wrapper) throw new Error('[CDP] Workflow domIndex ${domIndex} not found in selectWorkflowItem(). Only ' + workflowList.children.length + ' children.');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = wrapper;
 
         // The wrapper <div> has no click handler — the actual clickable element
         // is the inner <div class="cursor-pointer">
@@ -1180,18 +1126,7 @@ export async function selectWorkflowItem(cdp, domIndex) {
         return { ok: true };
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXPRESSION,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Context failed' };
+    return await runCdpScript(cdp, EXP, 'selectWorkflowItem');
 }
 
 /**
@@ -1207,6 +1142,7 @@ export async function listArtifacts(cdp) {
             // 1. Ensure the aux sidebar is open
             const toggleBtn = document.querySelector(SEL.artifacts.toggleSidebar);
             if (!toggleBtn) throw new Error('[CDP] Selector broken: "' + SEL.artifacts.toggleSidebar + '" — not found in listArtifacts()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = toggleBtn;
 
             // Check if sidebar is already visible by looking for the sidebar panel content
             const sidebarContent = document.querySelector('.px-3.pb-2.flex.h-full.w-full.flex-col.gap-4');
@@ -1247,21 +1183,10 @@ export async function listArtifacts(cdp) {
                 }));
 
             return { artifacts };
-        } catch (e) { return { error: e.toString(), artifacts: [] }; }
+        } catch(e) {     return {         error: e.toString(), artifacts: [] ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Context failed', artifacts: [] };
+    return await runCdpScript(cdp, EXP, 'listArtifacts');
 }
 
 /**
@@ -1276,11 +1201,13 @@ export async function getArtifactContent(cdp, name) {
     const EXP = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
         try {
+            let lastValidRoot = document.body;
             const targetName = ${safeName};
 
             // 1. Ensure sidebar is open
             const toggleBtn = document.querySelector(SEL.artifacts.toggleSidebar);
             if (!toggleBtn) throw new Error('[CDP] Selector broken: "' + SEL.artifacts.toggleSidebar + '" — not found in getArtifactContent()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = toggleBtn;
 
             const sidebarContent = document.querySelector('.px-3.pb-2.flex.h-full.w-full.flex-col.gap-4');
             if (!sidebarContent || sidebarContent.offsetWidth < 100) {
@@ -1348,22 +1275,10 @@ export async function getArtifactContent(cdp, name) {
                 html: html.substring(0, 100000),
                 ...headerInfo,
             };
-        } catch (e) { return { error: e.toString() }; }
+        } catch(e) {     return {         error: e.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value && !res.result.value.error) return res.result.value;
-            if (res.result?.value?.error) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Context failed' };
+    return await runCdpScript(cdp, EXP, 'getArtifactContent');
 }
 
 
@@ -1488,7 +1403,8 @@ export async function addContextualComment(cdp, { artifactName, selectedText, co
             await new Promise(r => setTimeout(r, 100));
 
             const commentText = ${safeComment};
-            const lines = commentText.split('\\n');
+            const lines = commentText.split('\
+');
             for (let i = 0; i < lines.length; i++) {
                 if (lines[i].length > 0) document.execCommand("insertText", false, lines[i]);
                 if (i < lines.length - 1) document.execCommand("insertLineBreak");
@@ -1503,22 +1419,10 @@ export async function addContextualComment(cdp, { artifactName, selectedText, co
             await new Promise(r => setTimeout(r, 500));
 
             return { success: true };
-        } catch (e) { return { error: e.toString() }; }
+        } catch(e) {     return {         error: e.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value && !res.result.value.error) return res.result.value;
-            if (res.result?.value?.error) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Context failed' };
+    return await runCdpScript(cdp, EXP, 'addContextualComment');
 }
 
 /**
@@ -1532,6 +1436,7 @@ export async function proceedArtifact(cdp) {
         try {
             const artPanel = document.querySelector(SEL.artifacts.viewerPanel);
             if (!artPanel) throw new Error('[CDP] Selector broken: "' + SEL.artifacts.viewerPanel + '" — not found in proceedArtifact()');
+            if(typeof lastValidRoot !== 'undefined') lastValidRoot = artPanel;
 
             // Find the Proceed button within the viewer
             const proceedBtn = Array.from(artPanel.querySelectorAll('button'))
@@ -1541,19 +1446,8 @@ export async function proceedArtifact(cdp) {
             
             proceedBtn.click();
             return { success: true };
-        } catch(e) { return { error: e.toString() }; }
+        } catch(e) {     return {         error: e.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
 
-    for (const ctx of cdp.contexts) {
-        try {
-            const res = await cdp.call("Runtime.evaluate", {
-                expression: EXP,
-                returnByValue: true,
-                awaitPromise: true,
-                contextId: ctx.id
-            });
-            if (res.result?.value) return res.result.value;
-        } catch (e) {}
-    }
-    return { error: 'Context failed' };
+    return await runCdpScript(cdp, EXP, 'proceedArtifact');
 }

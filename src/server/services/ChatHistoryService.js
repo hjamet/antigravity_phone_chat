@@ -31,6 +31,7 @@ export class ChatHistoryService {
         this.isStreaming = false;
         this.scrollInfo = null;
         this.ignoreUntil = 0; // Legacy
+        this.availableArtifacts = [];
         console.log(`🔄 ChatHistoryService reset — waiting for UI transition`);
     }
 

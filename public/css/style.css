@@ -1823,6 +1823,8 @@ textarea::-webkit-scrollbar {
     border-top: 1px solid rgba(139, 92, 246, 0.15);
     background: rgba(17, 17, 27, 0.6);
     backdrop-filter: blur(6px);
+    flex-shrink: 0;
+    z-index: 10;
 }
 .artifact-bar::-webkit-scrollbar { display: none; }
 .artifact-bar-btn {
@@ -1851,4 +1853,137 @@ textarea::-webkit-scrollbar {
     flex-shrink: 0;
     color: #a78bfa;
     opacity: 0.7;
+}
+
+/* ===== Inline Contextual Comment Popover ===== */
+.artifact-inline-popover {
+    position: absolute;
+    display: none;
+    flex-direction: column;
+    z-index: 9999;
+    background: rgba(17, 17, 27, 0.95);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 8px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px rgba(139, 92, 246, 0.15);
+    transform: translateX(-50%);
+    animation: popoverFadeIn 0.2s ease-out forwards;
+    padding: 2px;
+}
+@keyframes popoverFadeIn {
+    from { opacity: 0; transform: translate(-50%, 10px) scale(0.95); }
+    to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+/* Arrow pointer */
+.artifact-inline-popover::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 10px;
+    height: 10px;
+    background: rgba(17, 17, 27, 0.95);
+    border-right: 1px solid rgba(139, 92, 246, 0.3);
+    border-bottom: 1px solid rgba(139, 92, 246, 0.3);
+    z-index: -1;
+}
+
+/* Initial state (just the button) */
+.inline-comment-trigger {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-main);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.2s;
+    font-family: inherit;
+}
+.inline-comment-trigger:hover {
+    background: rgba(139, 92, 246, 0.2);
+}
+.inline-comment-trigger svg {
+    color: #a78bfa;
+}
+
+/* Expanded state (the form) */
+.artifact-inline-popover.expanded {
+    width: 320px;
+    padding: 12px;
+}
+.artifact-inline-popover.expanded .inline-comment-trigger {
+    display: none;
+}
+.inline-comment-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.inline-comment-quote {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+    border-left: 2px solid rgba(139, 92, 246, 0.5);
+    padding-left: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 6px 8px;
+    border-radius: 0 4px 4px 0;
+}
+.inline-comment-input {
+    width: 100%;
+    min-height: 80px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 8px;
+    color: var(--text-main);
+    font-size: 13px;
+    resize: vertical;
+    outline: none;
+    font-family: inherit;
+    transition: border-color 0.2s;
+}
+.inline-comment-input:focus {
+    border-color: rgba(139, 92, 246, 0.6);
+}
+.inline-comment-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+.inline-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    font-family: inherit;
+}
+.inline-btn.cancel {
+    background: transparent;
+    color: var(--text-muted);
+}
+.inline-btn.cancel:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+}
+.inline-btn.submit {
+    background: #8b5cf6;
+    color: white;
+}
+.inline-btn.submit:hover {
+    background: #7c3aed;
+}
+.inline-btn.submit:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }

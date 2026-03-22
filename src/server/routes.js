@@ -362,10 +362,13 @@ export function setupRoutes(app, {
 
     router.post('/api/artifacts/:name/comment', async (req, res) => {
         const { name } = req.params;
-        const { comment } = req.body;
-        if (!name || !comment) return res.status(400).json({ error: 'name and comment required' });
-        const result = await managerCdp.addArtifactComment(cdpConnections.manager, {
+        const { selectedText, comment } = req.body;
+        if (!name || !comment || !selectedText) {
+            return res.status(400).json({ error: 'name, selectedText and comment required' });
+        }
+        const result = await managerCdp.addContextualComment(cdpConnections.manager, {
             artifactName: decodeURIComponent(name),
+            selectedText,
             comment
         });
         res.json(result);

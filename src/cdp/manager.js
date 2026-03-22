@@ -1366,87 +1366,143 @@ export async function getArtifactContent(cdp, name) {
     return { error: 'Context failed' };
 }
 
+
 /**
- * Add a comment on an artifact via CDP
- * Opens the artifact, clicks the Review button, types in the comment editor and submits
+ * Add a contextual comment on selected text within an artifact via CDP
+ * Selects the target text in the viewer, triggers the native "Comment" button,
+ * types in the floating comment dialog, and clicks "Add Comment"
  * @param {Object} cdp CDP connection
- * @param {Object} params { artifactName, comment }
+ * @param {Object} params { artifactName, selectedText, comment }
  */
-export async function addArtifactComment(cdp, { artifactName, comment }) {
+export async function addContextualComment(cdp, { artifactName, selectedText, comment }) {
     if (!cdp) return { error: 'Not connected' };
-    const safeName = JSON.stringify(artifactName);
+    const safeSelectedText = JSON.stringify(selectedText);
     const safeComment = JSON.stringify(comment);
 
     const EXP = `(async () => {
-        const SEL = ${JSON.stringify(SELECTORS)};
         try {
-            // 1. Find the artifact viewer panel (it should already be open)
-            let viewer = Array.from(document.querySelectorAll('div'))
+            // 1. Find the artifact viewer panel (should be open from getArtifactContent)
+            const viewers = Array.from(document.querySelectorAll('div'))
                 .filter(d => {
                     const cls = d.className || '';
                     return cls.includes('leading-relaxed') && cls.includes('select-text')
                         && d.offsetWidth > 200 && (d.innerText?.length || 0) > 50;
                 })
-                .sort((a, b) => (b.innerText?.length || 0) - (a.innerText?.length || 0))[0];
-
+                .sort((a, b) => (b.innerText?.length || 0) - (a.innerText?.length || 0));
+            const viewer = viewers[0];
             if (!viewer) return { error: 'Artifact viewer not open. Call getArtifactContent first.' };
 
-            // 2. Find the Review button in the viewer panel
-            const artPanel = viewer.closest('.flex.w-full.h-full.outline-none.flex-col');
-            if (!artPanel) return { error: 'Artifact panel container not found' };
+            // 2. Find target text and select it via Range/Selection API
+            const targetText = ${safeSelectedText};
+            
+            function findTextNode(root, searchText) {
+                const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+                let node;
+                while (node = walker.nextNode()) {
+                    const idx = node.textContent.indexOf(searchText);
+                    if (idx !== -1) return { node, offset: idx };
+                }
+                // Cross-node: count characters to find range
+                const allText = root.innerText || '';
+                const pos = allText.indexOf(searchText);
+                if (pos === -1) return null;
+                let charCount = 0;
+                let startNode = null, startOffset = 0, endNode = null, endOffset = 0;
+                const w2 = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+                while (node = w2.nextNode()) {
+                    const len = node.textContent.length;
+                    if (!startNode && charCount + len > pos) {
+                        startNode = node;
+                        startOffset = pos - charCount;
+                    }
+                    if (startNode && charCount + len >= pos + searchText.length) {
+                        endNode = node;
+                        endOffset = pos + searchText.length - charCount;
+                        break;
+                    }
+                    charCount += len;
+                }
+                if (startNode && endNode) return { startNode, startOffset, endNode, endOffset, multiNode: true };
+                return null;
+            }
 
-            const reviewBtn = artPanel.querySelector('button[aria-haspopup="dialog"]');
-            if (!reviewBtn) return { error: 'Review button not found in artifact viewer header' };
+            const match = findTextNode(viewer, targetText);
+            if (!match) return { error: 'Selected text not found in viewer: "' + targetText.substring(0, 50) + '"' };
 
-            // 3. Click Review to open the comment dialog
-            reviewBtn.click();
-            await new Promise(r => setTimeout(r, 1000));
+            const range = document.createRange();
+            if (match.multiNode) {
+                range.setStart(match.startNode, match.startOffset);
+                range.setEnd(match.endNode, match.endOffset);
+            } else {
+                range.setStart(match.node, match.offset);
+                range.setEnd(match.node, match.offset + targetText.length);
+            }
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
 
-            // 4. Find the comment editor
-            const commentEditor = document.querySelector(SEL.artifacts.commentEditor);
-            if (!commentEditor) return { error: 'Comment editor not found after clicking Review. Selector: ' + SEL.artifacts.commentEditor };
+            // 3. Dispatch mouseup to trigger the "Comment" floating button
+            const rect = range.getBoundingClientRect();
+            viewer.dispatchEvent(new MouseEvent('mouseup', {
+                bubbles: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2,
+            }));
+            await new Promise(r => setTimeout(r, 800));
 
-            // 5. Focus and type in the comment
-            commentEditor.focus();
+            // 4. Click the "Comment" button
+            let commentBtn = Array.from(document.querySelectorAll('button'))
+                .find(b => b.offsetParent !== null && b.offsetWidth > 0
+                    && (b.innerText?.trim() === 'Comment' || b.innerText?.trim() === 'Comment on this line'));
+            
+            if (!commentBtn) {
+                // Retry with pointerup
+                viewer.dispatchEvent(new PointerEvent('pointerup', {
+                    bubbles: true, clientX: rect.left + rect.width / 2, clientY: rect.top,
+                }));
+                await new Promise(r => setTimeout(r, 800));
+                commentBtn = Array.from(document.querySelectorAll('button'))
+                    .find(b => b.offsetParent !== null && (b.innerText?.trim() === 'Comment' || b.innerText?.trim() === 'Comment on this line'));
+            }
+
+            if (commentBtn) {
+                commentBtn.click();
+                await new Promise(r => setTimeout(r, 800));
+            }
+
+            // 5. Find the floating comment dialog
+            const floatingDialog = Array.from(document.querySelectorAll('div'))
+                .find(d => {
+                    const cls = d.className || '';
+                    return cls.includes('absolute') && cls.includes('z-50')
+                        && cls.includes('shadow-xl') && d.offsetWidth > 200
+                        && d.querySelector('[contenteditable="true"][data-lexical-editor="true"]');
+                });
+            if (!floatingDialog) return { error: 'Comment dialog not found after text selection.' };
+
+            const editor = floatingDialog.querySelector('[contenteditable="true"][data-lexical-editor="true"]');
+            if (!editor) return { error: 'Comment editor not found in dialog' };
+
+            // 6. Type the comment
+            editor.focus();
             document.execCommand("selectAll", false, null);
             document.execCommand("delete", false, null);
             await new Promise(r => setTimeout(r, 100));
 
-            const text = ${safeComment};
-            const lines = text.split('\\n');
+            const commentText = ${safeComment};
+            const lines = commentText.split('\\n');
             for (let i = 0; i < lines.length; i++) {
-                if (lines[i].length > 0) {
-                    document.execCommand("insertText", false, lines[i]);
-                }
+                if (lines[i].length > 0) document.execCommand("insertText", false, lines[i]);
                 if (i < lines.length - 1) document.execCommand("insertLineBreak");
             }
-            await new Promise(r => setTimeout(r, 200));
+            await new Promise(r => setTimeout(r, 300));
 
-            // 6. Find and click the submit/add comment button
-            // Look for a button near the comment editor that submits (typically Enter key or a button)
-            const parentContainer = commentEditor.closest('div[class*="flex"]');
-            const submitBtns = parentContainer
-                ? Array.from(parentContainer.querySelectorAll('button'))
-                    .filter(b => b.offsetParent !== null && b.offsetWidth > 0)
-                : [];
-
-            if (submitBtns.length > 0) {
-                // Click the last visible button (usually the submit button)
-                submitBtns[submitBtns.length - 1].click();
-                await new Promise(r => setTimeout(r, 500));
-                return { success: true, method: 'button_click' };
-            }
-
-            // Fallback: submit via Enter key
-            commentEditor.dispatchEvent(new KeyboardEvent("keydown", {
-                bubbles: true, key: "Enter", code: "Enter"
-            }));
-            commentEditor.dispatchEvent(new KeyboardEvent("keyup", {
-                bubbles: true, key: "Enter", code: "Enter"
-            }));
+            // 7. Click "Add Comment"
+            const addBtn = Array.from(floatingDialog.querySelectorAll('button'))
+                .find(b => b.innerText?.trim() === 'Add Comment' && b.offsetParent !== null);
+            if (!addBtn) return { error: '"Add Comment" button not found' };
+            addBtn.click();
             await new Promise(r => setTimeout(r, 500));
 
-            return { success: true, method: 'enter_key' };
+            return { success: true };
         } catch (e) { return { error: e.toString() }; }
     })()`;
 
@@ -1458,7 +1514,8 @@ export async function addArtifactComment(cdp, { artifactName, comment }) {
                 awaitPromise: true,
                 contextId: ctx.id
             });
-            if (res.result?.value) return res.result.value;
+            if (res.result?.value && !res.result.value.error) return res.result.value;
+            if (res.result?.value?.error) return res.result.value;
         } catch (e) {}
     }
     return { error: 'Context failed' };

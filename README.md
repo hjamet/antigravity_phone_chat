@@ -33,8 +33,9 @@ L'application agit comme un proxy intelligent :
 - **Frontend (ES Modules)** : Interface découpée en modules indépendants (`public/js/`) — seuls les 2 derniers messages (user + agent) sont affichés.
 - **Fix New Chat** : Support complet de la page "Nouvelle Conversation" (DOM vide) et envoi de message.
 - **Extraction Intelli** : Capture des blocs tâches, réflexions et messages directes de l'agent.
-- **Artefacts & Commentaires** : Visualisation des artefacts Antigravity (Implementation Plan, Task, Walkthrough) avec rendu markdown fidèle et ajout de commentaires CDP bidirectionnels.
+- **Artefacts & Commentaires** : Visualisation des artefacts Antigravity avec rendu markdown fidèle. Ajout de **commentaires contextuels rapides** (sélection de texte web instancie via CDP le visualiseur Lexical dans Agent Manager) en plus des boutons d'accès rapide.
 - **Smart Scrolling** : Scroll forcé dans l'Agent Manager (CDP). Interface web avec auto-scroll intelligent (seulement si en bas) et notification toast « ✅ Réponse reçue » à la fin du streaming.
+- **PWA Installable** : L'application est installable sur Android (et tout navigateur compatible PWA) avec un manifest W3C, un Service Worker et une bannière d'installation personnalisée.
 
 ## 5. # Principaux résultats
 | Feature | État | Source de vérité |
@@ -45,6 +46,7 @@ L'application agit comme un proxy intelligent :
 | Mode/Model Sync | ✅ Stable | Agent Manager CDP |
 | Artifacts Viewer | ✅ Nouveau | Agent Manager CDP |
 | Smart Scrolling & Notifications | ✅ Nouveau | CDP + Frontend |
+| PWA Installable | ✅ Nouveau | manifest.json + sw.js |
 
 ## 6. # Documentation Index
 | Titre (Lien) | Description |
@@ -65,7 +67,10 @@ L'application agit comme un proxy intelligent :
 │       ├── routes.js     # API REST (Express)
 │       └── ws.js         # WebSockets
 ├── public/
-│   └── js/               # Frontend modulaire (ESM: main, chat, ui, history, projects, picker, artifacts)
+│   ├── js/               # Frontend modulaire (ESM: main, chat, ui, history, projects, picker, artifacts)
+│   ├── icons/            # Icônes PWA (192x192, 512x512)
+│   ├── manifest.json     # Manifest W3C pour PWA
+│   └── sw.js             # Service Worker (cache & offline)
 ├── docs/                 # Documentation détaillée et spécifications
 ├── scripts/              # Utilitaires Node.js (dont generate_ssl.js)
 ├── startup_scripts/      # Scripts de lancement (.bat, .sh, launcher.py)
@@ -113,6 +118,7 @@ L'application agit comme un proxy intelligent :
 | 23 | **Fix Sélection Workflow** | ✅ Fait | [fix-workflow-selection.md](docs/tasks/fix-workflow-selection.md) |
 | 24 | **Artefacts & Commentaires** | ✅ Fait | [artifacts-viewer.md](docs/tasks/artifacts-viewer.md) |
 | 25 | **Fix Erreur Syntaxe Démarrage** | ✅ Fait | [fix-startup-syntax-error.md](docs/tasks/fix-startup-syntax-error.md) |
+| 26 | **PWA Installable (Logo & Install)** | ✅ Fait | — |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

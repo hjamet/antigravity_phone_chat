@@ -257,8 +257,8 @@ async function createServer() {
     });
 
     app.use((req, res, next) => {
-        const publicPaths = ['/login', '/login.html', '/favicon.ico'];
-        if (publicPaths.includes(req.path) || req.path.startsWith('/css/')) return next();
+        const publicPaths = ['/login', '/login.html', '/favicon.ico', '/manifest.json', '/sw.js'];
+        if (publicPaths.includes(req.path) || req.path.startsWith('/css/') || req.path.startsWith('/icons/')) return next();
         if (isLocalRequest(req)) return next();
         
         if (req.query.key === APP_PASSWORD) {
@@ -274,7 +274,16 @@ async function createServer() {
         }
     });
 
-    app.use(express.static(join(__dirname, 'public')));
+    app.use(express.static(join(__dirname, 'public'), {
+        setHeaders: (res, path) => {
+            if (path.endsWith('sw.js') || path.endsWith('manifest.json') || path.endsWith('index.html')) {
+                res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+                res.setHeader('Pragma', 'no-cache');
+                res.setHeader('Expires', '0');
+                res.setHeader('Surrogate-Control', 'no-store');
+            }
+        }
+    }));
 
     // Setup Modules
     const wsHandler = setupWebSocket(wss, {

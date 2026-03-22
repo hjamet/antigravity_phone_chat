@@ -9,7 +9,7 @@ export const SELECTORS = {
         workspaceItemPath: 'span.text-xs.opacity-50'       // Le span contenant le chemin local/remote
     },
     chat: {
-        scrollContainer: '[class*="scrollbar-hide"][class*="overflow-y"]',
+        scrollContainer: '[class*="overflow-y"]',
         turnsContainer: '[class*="flex"][class*="flex-col"][class*="gap-y"]',
         streamingIndicator: '[class*="progress_activity"],[class*="animate-spin"],[class*="animate-pulse"]'
     },
@@ -35,7 +35,7 @@ export const SELECTORS = {
 
     // ---- Control elements (input area below chat) ----
     controls: {
-        inputBox: '#antigravity\\.agentSidePanelInputBox',
+        inputBox: 'body',
         editor: '[contenteditable="true"][role="textbox"]',
         controlsRow: '.mt-1.flex.w-full.items-center.justify-between',           // Row holding mode/model buttons
         modeButton: 'button.py-1.pl-1.pr-2.flex.items-center',                   // Mode toggle (Fast/Planning)

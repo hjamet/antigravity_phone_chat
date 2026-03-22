@@ -120,6 +120,7 @@ L'application agit comme un proxy intelligent :
 | 26 | **PWA Installable (Logo & Install)** | ✅ Fait | — |
 | 27 | **Notifications OS Natives** | ✅ Fait | [add_native_notifications.md](docs/tasks/add_native_notifications.md) |
 | 28 | **Améliorations UI & Bouton Proceed** | ✅ Fait | — |
+| 29 | **Fix Selectors Manager** | ✅ Fait | [fix-selectors-manager.md](docs/tasks/fix-selectors-manager.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

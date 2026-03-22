@@ -1107,14 +1107,45 @@ export async function selectWorkflowItem(cdp, domIndex) {
     const EXPRESSION = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
 
-        const workflowList = document.querySelector(SEL.picker.workflowList);
-        if (!workflowList) throw new Error('[CDP] Selector broken: "' + SEL.picker.workflowList + '" — not found in selectWorkflowItem()');
+        let workflowList = document.querySelector(SEL.picker.workflowList);
+        
+        // If the workflow list is closed (Typeahead lost focus), we need to re-open it
+        if (!workflowList || workflowList.children.length === 0) {
+            const editor = document.querySelector(SEL.controls.editor);
+            if (!editor) throw new Error('[CDP] Editor not found');
+            
+            editor.focus();
+            document.execCommand("selectAll", false, null);
+            document.execCommand("delete", false, null);
+            await new Promise(r => setTimeout(r, 100));
+            document.execCommand("insertText", false, "/");
+            await new Promise(r => setTimeout(r, 1000));
+            
+            const dialog = document.querySelector(SEL.picker.dialog);
+            if (!dialog) throw new Error('[CDP] Dialog did not reappear');
+            
+            const categoryBtns = dialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
+            if (categoryBtns[2]) categoryBtns[2].click();
+            
+            // Wait for overlays
+            for (let i = 0; i < 6; i++) {
+                await new Promise(r => setTimeout(r, 400));
+                workflowList = document.querySelector(SEL.picker.workflowList);
+                if (workflowList && workflowList.children.length > 0) break;
+            }
+        }
+
+        if (!workflowList) throw new Error('[CDP] Selector broken: "' + SEL.picker.workflowList + '" — not found after retry in selectWorkflowItem()');
 
         const target = workflowList.children[${Number(domIndex)}];
         if (!target) throw new Error('[CDP] Workflow domIndex ${domIndex} not found in selectWorkflowItem(). Only ' + workflowList.children.length + ' children.');
 
         target.click();
         await new Promise(r => setTimeout(r, 500));
+
+        // Editor gets focus automatically, but we can clear any "junk" left by the slash
+        // Wait, BeautifulMentions automatically replaces the typed part with the badge.
+        // So hitting click() will transform the text into a badge.
 
         return { ok: true };
     })()`;

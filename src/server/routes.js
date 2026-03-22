@@ -190,7 +190,9 @@ export function setupRoutes(app, {
         if (!workspace) {
             return res.json({ error: 'Cannot determine current workspace. Open a project first.' });
         }
-        // 2. Open the project (same as select-project) — this creates a new conversation
+        // 2. Reset the server-side chat history cache
+        chatHistoryService.reset();
+        // 3. Open the project (same as select-project) — this creates a new conversation
         const result = await managerCdp.openProject(cdpConnections.manager, { name: workspace });
         if (result) {
             res.json({ success: true, method: 'open_project', workspace });

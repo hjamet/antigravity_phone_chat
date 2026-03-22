@@ -48,10 +48,12 @@ export async function onTriggerChar() {
             body: JSON.stringify({ char: '/' })
         });
         const data = await res.json();
+        console.log('[Picker] API response:', JSON.stringify(data).substring(0, 300));
 
         if (data.ok && data.items?.length > 0) {
             renderItems(data.items);
         } else {
+            console.warn('[Picker] No items or data.ok is false, hiding picker');
             hidePicker();
         }
     } catch (e) {

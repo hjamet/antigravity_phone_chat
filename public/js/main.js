@@ -9,7 +9,7 @@ import { sendMessage, stopGeneration, scrollToBottom } from './chat.js?v=10';
 import { loadHistory, startNewChat } from './history.js?v=10';
 import { loadProjects } from './projects.js?v=10';
 import { fetchWithAuth } from './api.js?v=10';
-import { initPicker, onTriggerChar, hidePicker, isPickerVisible, getWorkflowPrefix, clearWorkflow } from './picker.js?v=11';
+import { initPicker, onTriggerChar, hidePicker, isPickerVisible, getWorkflowPrefix, clearWorkflow } from './picker.js?v=12';
 
 /**
  * Poll /api/chat-state and render.

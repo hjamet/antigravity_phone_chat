@@ -6,6 +6,22 @@ export class ChatHistoryService {
         this.lastSnapshotHash = null;
         this.isStreaming = false;
         this.scrollInfo = null;
+        this.ignoreUntil = 0;
+    }
+
+    /**
+     * Reset the timeline for a new conversation.
+     * Called when the user starts a new chat or switches projects.
+     */
+    reset() {
+        this.chatTimeline = [];
+        this.lastSnapshotHash = null;
+        this.isStreaming = false;
+        this.scrollInfo = null;
+        // Ignore incoming snapshots for 2.5s to allow the Native UI to complete
+        // the project switch / new chat creation without capturing stale DOM data.
+        this.ignoreUntil = Date.now() + 2500;
+        console.log('🔄 ChatHistoryService reset — ignoring snapshots for 2.5s');
     }
 
     /**
@@ -28,6 +44,10 @@ export class ChatHistoryService {
      * @returns {Object} - An object containing { hash, hasChanged, snapshotContainer }
      */
     processSnapshot(snapshot) {
+        if (Date.now() < this.ignoreUntil) {
+            return { hasChanged: false, ignored: true };
+        }
+
         if (!snapshot || snapshot.error) {
             return { hasChanged: false, error: snapshot?.error || 'Invalid snapshot' };
         }

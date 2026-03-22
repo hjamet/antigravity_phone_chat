@@ -116,9 +116,10 @@ L'application agit comme un proxy intelligent :
 | 21 | **Refactoring Commandes CDP (No-Fallback)** | ✅ Fait | [refactor-cdp-controls-nofallback.md](docs/tasks/refactor-cdp-controls-nofallback.md) |
 | 22 | **Auto-fermeture des scripts** | ✅ Fait | [auto-close-startup-scripts.md](docs/tasks/auto-close-startup-scripts.md) |
 | 23 | **Fix Sélection Workflow** | ✅ Fait | [fix-workflow-selection.md](docs/tasks/fix-workflow-selection.md) |
-| 24 | **Artefacts & Commentaires** | ✅ Fait | [artifacts-viewer.md](docs/tasks/artifacts-viewer.md) |
 | 25 | **Fix Erreur Syntaxe Démarrage** | ✅ Fait | [fix-startup-syntax-error.md](docs/tasks/fix-startup-syntax-error.md) |
 | 26 | **PWA Installable (Logo & Install)** | ✅ Fait | — |
+| 27 | **Notifications OS Natives** | ✅ Fait | [add_native_notifications.md](docs/tasks/add_native_notifications.md) |
+| 28 | **Améliorations UI & Bouton Proceed** | ✅ Fait | — |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

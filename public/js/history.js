@@ -71,9 +71,14 @@ function renderHistory(chats) {
             const item = document.createElement('div');
             item.className = `history-card ${chat.isActive ? 'active' : ''}`;
             
-            let iconCode = chat.isActive 
-                ? `<div class="history-card-active-dot"></div><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" class="spin-anim"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path></svg>`
-                : `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`;
+            let iconCode;
+            if (chat.isActive) {
+                iconCode = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" class="spin-anim" style="color: var(--accent);"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path></svg>`;
+            } else if (chat.isFinished) {
+                iconCode = `<div class="history-card-finished-dot"></div>`;
+            } else {
+                iconCode = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" style="opacity: 0.7;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`;
+            }
                 
             item.innerHTML = `
                 <div class="history-card-icon">

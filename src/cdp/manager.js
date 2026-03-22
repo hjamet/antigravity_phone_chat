@@ -621,8 +621,8 @@ export async function getAppState(cdp) {
                 return section && section.querySelector('[data-testid^="convo-pill-"]');
             });
             if (activeWs) state.workspace = activeWs.textContent.trim();
-
-            return state;
+const pills=Array.from(document.querySelectorAll(SEL.history.conversationPill));const activePill=pills.find(p=>{const btn=p.closest('button');return btn&&(btn.classList.contains('bg-ide-editor-background')||btn.classList.contains('bg-ide-element-background')||btn.getAttribute('aria-selected')==='true')});if(activePill) state.chatTitle=activePill.textContent.trim();
+return state;
         } catch(e) { return { error: e.toString() }; }
     })()`;
 
@@ -741,7 +741,7 @@ export async function getChatHistory(cdp) {
                     });
                 }
 
-                let workspace = 'Other';
+                let isFinished=false;if(container){const greenDot=container.querySelector('.bg-green-500, .bg-green-400, [class*="bg-green-"]');if(greenDot)isFinished=true;}let workspace='Other';
                 const section = pill.closest(SEL.history.sectionContainer);
                 if (section) {
                     const header = section.querySelector(SEL.history.sectionHeader);
@@ -749,7 +749,7 @@ export async function getChatHistory(cdp) {
                 }
 
                 if (title.length > 2) {
-                    chats.push({ title, id, time: time || 'Recent', isActive, workspace });
+                    chats.push({title,id,time:time||'Recent',isActive,isFinished,workspace});
                 }
             });
 
@@ -1516,6 +1516,43 @@ export async function addContextualComment(cdp, { artifactName, selectedText, co
             });
             if (res.result?.value && !res.result.value.error) return res.result.value;
             if (res.result?.value?.error) return res.result.value;
+        } catch (e) {}
+    }
+    return { error: 'Context failed' };
+}
+
+/**
+ * Click the "Proceed" button inside the artifact viewer
+ * @param {Object} cdp CDP connection
+ */
+export async function proceedArtifact(cdp) {
+    if (!cdp) return { error: 'Not connected' };
+    const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
+        try {
+            const artPanel = document.querySelector(SEL.artifacts.viewerPanel);
+            if (!artPanel) throw new Error('[CDP] Selector broken: "' + SEL.artifacts.viewerPanel + '" — not found in proceedArtifact()');
+
+            // Find the Proceed button within the viewer
+            const proceedBtn = Array.from(artPanel.querySelectorAll('button'))
+                .find(b => b.innerText?.trim() === 'Proceed' && b.offsetParent !== null);
+                
+            if (!proceedBtn) return { error: 'Proceed button not found in artifact viewer. It may have already been clicked or is not available.' };
+            
+            proceedBtn.click();
+            return { success: true };
+        } catch(e) { return { error: e.toString() }; }
+    })()`;
+
+    for (const ctx of cdp.contexts) {
+        try {
+            const res = await cdp.call("Runtime.evaluate", {
+                expression: EXP,
+                returnByValue: true,
+                awaitPromise: true,
+                contextId: ctx.id
+            });
+            if (res.result?.value) return res.result.value;
         } catch (e) {}
     }
     return { error: 'Context failed' };

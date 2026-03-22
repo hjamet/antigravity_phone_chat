@@ -387,6 +387,16 @@ export function updateStateUI(state) {
     if (statsText) {
         statsText.textContent = state.workspace || 'Ready';
     }
+    const headerTitle = document.getElementById('headerTitle');
+    if (headerTitle) {
+        if (state.workspace && state.chatTitle) {
+            headerTitle.textContent = `${state.workspace} - ${state.chatTitle}`;
+        } else if (state.workspace) {
+            headerTitle.textContent = state.workspace;
+        } else {
+            headerTitle.textContent = 'Antigravity Connect';
+        }
+    }
 }
 
 /**

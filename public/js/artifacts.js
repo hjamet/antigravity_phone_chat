@@ -107,7 +107,37 @@ export function closeArtifactViewer() {
 }
 
 /**
+ * Pending comments waiting to be sent
+ * @type {Array<{artifact: string, selectedText: string|null, comment: string}>}
+ */
+let draftComments = [];
+
+/**
+ * Returns all drafted comments formatted as XML and clears the draft list.
+ * @returns {string} XML formatted comments, or empty string if none
+ */
+export function flushDraftComments() {
+    if (draftComments.length === 0) return '';
+    
+    let xml = '';
+    draftComments.forEach(draft => {
+        // Need to ensure we don't break XML structure
+        const safeTarget = draft.artifact.replace(/"/g, '&quot;');
+        xml += `<artifact_comment target="${safeTarget}">\n`;
+        if (draft.selectedText) {
+            xml += `<selected_text>\n${draft.selectedText}\n</selected_text>\n`;
+        }
+        xml += `<comment>\n${draft.comment}\n</comment>\n`;
+        xml += `</artifact_comment>\n\n`;
+    });
+    
+    draftComments = [];
+    return xml.trim();
+}
+
+/**
  * Submit a comment on the currently open artifact.
+ * Instead of sending immediately, it drafts the comment to be sent with the next chat message.
  * @param {string|null} selectedText Optional text selection for contextual comments
  * @param {string} commentText The comment content
  * @returns {Promise<boolean>} Success status
@@ -128,38 +158,27 @@ export async function submitArtifactComment(selectedText = null, commentText = n
 
     if (!commentText || !currentArtifact) return false;
 
-    if (btn && !isContextual) { btn.disabled = true; btn.textContent = 'Sending...'; }
+    // Push to drafts
+    draftComments.push({
+        artifact: currentArtifact,
+        selectedText: isContextual ? selectedText : null,
+        comment: commentText
+    });
 
-    try {
-        const body = isContextual ? { selectedText, comment: commentText } : { comment: commentText };
-        // The backend requires selectedText, so if global, send a dummy space or handle it differently?
-        // Actually, the new backend expects /api/artifacts/:name/comment with both selectedText and comment.
-        // If it's a global comment, maybe we just pass empty selection?
-        if (!isContextual) body.selectedText = ""; 
-        
-        const res = await fetchWithAuth(`/api/artifacts/${encodeURIComponent(currentArtifact)}/comment`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        const data = await res.json();
-
-        if (data.success) {
-            if (!isContextual && textarea) textarea.value = '';
-            if (btn && !isContextual) {
-                btn.textContent = '✓ Sent';
-                setTimeout(() => { btn.textContent = 'Add Comment'; btn.disabled = false; }, 2000);
-            }
-            return true;
-        } else {
-            console.error(data.error);
-            if (btn && !isContextual) { btn.textContent = 'Error'; setTimeout(() => { btn.textContent = 'Add Comment'; btn.disabled = false; }, 2000); }
-            return false;
-        }
-    } catch (e) {
-        if (btn && !isContextual) { btn.textContent = 'Error'; setTimeout(() => { btn.textContent = 'Add Comment'; btn.disabled = false; }, 2000); }
-        return false;
+    if (!isContextual && textarea) textarea.value = '';
+    
+    // Provide visual feedback
+    if (btn && !isContextual) {
+        const originalText = btn.textContent;
+        btn.textContent = '✓ Saved in draft';
+        btn.classList.add('success');
+        setTimeout(() => { 
+            btn.textContent = 'Add Comment'; 
+            btn.classList.remove('success');
+        }, 2000);
     }
+
+    return true;
 }
 
 /**
@@ -285,27 +304,39 @@ export function initArtifacts() {
         viewerContent.addEventListener('keyup', (e) => {
             if (e.key === 'Shift' || e.key.includes('Arrow')) handleTextSelection();
         });
+        
+        // Support for mobile text selection
+        document.addEventListener('selectionchange', () => {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+                const node = sel.anchorNode;
+                if (viewerContent.contains(node)) {
+                    clearTimeout(window._selTimeout);
+                    window._selTimeout = setTimeout(handleTextSelection, 400);
+                }
+            }
+        });
     }
 
-    // Hide inline popover when clicking elsewhere
-    document.addEventListener('mousedown', (e) => {
+    // Hide inline popover when clicking outside
+    const hidePopover = (e) => {
         const popover = document.getElementById('artifact-inline-popover');
         if (popover && !popover.contains(e.target)) {
             popover.style.display = 'none';
             popover.classList.remove('expanded');
         }
-    });
+    };
+    document.addEventListener('mousedown', hidePopover);
+    document.addEventListener('touchstart', hidePopover, { passive: true });
 
     // Proceed button
     document.getElementById('artifactProceedBtn')?.addEventListener('click', async () => {
         if (!currentArtifact) return;
         try {
-            // Click Proceed on the desktop via remote-click
-            await fetchWithAuth('/remote-click', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ selector: 'button', textContent: 'Proceed' })
-            });
+            await fetchWithAuth('/api/artifacts/proceed', { method: 'POST' });
+            // Hide the button after clicking
+            const btn = document.getElementById('artifactProceedBtn');
+            if (btn) btn.style.display = 'none';
         } catch (e) {}
     });
 

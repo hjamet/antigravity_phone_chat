@@ -374,6 +374,11 @@ export function setupRoutes(app, {
         res.json(result);
     });
 
+    router.post('/api/artifacts/proceed', async (req, res) => {
+        const result = await managerCdp.proceedArtifact(cdpConnections.manager);
+        res.json(result);
+    });
+
     // Use router
     app.use('/', router);
 }

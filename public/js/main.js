@@ -10,7 +10,7 @@ import { loadHistory, startNewChat } from './history.js?v=10';
 import { loadProjects } from './projects.js?v=10';
 import { fetchWithAuth } from './api.js?v=10';
 import { initPicker, onTriggerChar, hidePicker, isPickerVisible, getWorkflowPrefix, clearWorkflow } from './picker.js?v=12';
-import { loadArtifacts, initArtifacts } from './artifacts.js?v=1';
+import { loadArtifacts, initArtifacts, flushDraftComments } from './artifacts.js?v=2';
 
 /**
  * Poll /api/chat-state and render.
@@ -25,6 +25,14 @@ let _wasStreaming = false;
  * Show a toast notification when the agent finishes responding
  */
 function showCompletionToast() {
+    // Trigger native OS Notification if granted
+    if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("Antigravity", {
+            body: "✅ Agent a terminé de répondre",
+            icon: "/icons/icon-192.png"
+        });
+    }
+
     // Avoid duplicate toasts
     if (document.getElementById('completionToast')) return;
     const toast = document.createElement('div');
@@ -128,6 +136,9 @@ async function init() {
     // 4. Unified send handler — prevents double-send with workflow prefix
     let _sendGuard = false;
     function doSend() {
+        if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+        }
         if (_sendGuard) return;
         if (window.isAgentStreaming) {
             import('./chat.js?v=10').then(m => m.stopGeneration());
@@ -135,9 +146,24 @@ async function init() {
         }
         _sendGuard = true;
         const prefix = getWorkflowPrefix();
-        const text = elements.chatInput.value;
+        const text = elements.chatInput.value.trim();
         clearWorkflow();
-        sendMessage(prefix + text);
+        
+        let finalText = text;
+        const draftedXml = flushDraftComments();
+        
+        if (draftedXml) {
+            if (finalText) {
+                finalText = draftedXml + "\n\n" + finalText;
+            } else {
+                finalText = draftedXml;
+            }
+        }
+        
+        if (prefix || finalText) {
+            sendMessage(prefix + finalText);
+        }
+        
         // Release guard after a short delay to block any duplicate trigger
         setTimeout(() => { _sendGuard = false; }, 1000);
     }

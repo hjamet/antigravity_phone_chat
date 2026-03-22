@@ -1811,3 +1811,44 @@ textarea::-webkit-scrollbar {
     transform: translateX(-50%) translateY(0);
     opacity: 1;
 }
+
+/* ===== Artifact Quick-Access Bar ===== */
+.artifact-bar {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    border-top: 1px solid rgba(139, 92, 246, 0.15);
+    background: rgba(17, 17, 27, 0.6);
+    backdrop-filter: blur(6px);
+}
+.artifact-bar::-webkit-scrollbar { display: none; }
+.artifact-bar-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    background: rgba(139, 92, 246, 0.08);
+    color: var(--text-main);
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.artifact-bar-btn:hover {
+    background: rgba(139, 92, 246, 0.18);
+    border-color: rgba(139, 92, 246, 0.4);
+}
+.artifact-bar-btn:active { transform: scale(0.96); }
+.artifact-bar-btn svg {
+    flex-shrink: 0;
+    color: #a78bfa;
+    opacity: 0.7;
+}

@@ -143,31 +143,37 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                         }
                     }
 
-                    // 4. ARTIFACT Cards inline — H4 with SPAN.truncate (file preview cards)
-                    const artHeadings = Array.from(turn.querySelectorAll('h4 span.truncate'))
-                        .filter(el => el.offsetParent !== null && el.offsetWidth > 30);
-                    if (artHeadings.length > 0) {
-                        const refs = [];
-                        for (const span of artHeadings) {
-                            const name = span.innerText?.trim();
-                            if (name && name.length > 1 && name.length < 80) {
-                                refs.push(name);
-                            }
-                        }
-                        // Attach to the last collected message from this turn
-                        if (refs.length > 0 && collected.length > 0) {
-                            const last = collected[collected.length - 1];
-                            last.artifactRefs = (last.artifactRefs || []).concat(refs);
-                        }
-                    }
                 }
             }
             
             extractVisible();
             // Force scroll to bottom so we never miss messages in Agent Manager
             chatScroll.scrollTop = chatScroll.scrollHeight;
+
+            // Extract available artifacts from sidebar (if visible)
+            let availableArtifacts = [];
+            try {
+                const allDivs = Array.from(document.querySelectorAll('div'));
+                const artHeader = allDivs.find(d => {
+                    const ownText = Array.from(d.childNodes)
+                        .filter(n => n.nodeType === 3)
+                        .map(n => n.textContent.trim())
+                        .join(' ');
+                    return ownText === 'Artifacts' && d.offsetParent !== null;
+                });
+                if (artHeader) {
+                    const headerRow = artHeader.parentElement;
+                    const ul = headerRow?.nextElementSibling;
+                    if (ul && ul.tagName === 'UL') {
+                        availableArtifacts = Array.from(ul.querySelectorAll('li'))
+                            .filter(li => li.offsetParent !== null && li.innerText?.trim().length > 1)
+                            .map(li => li.innerText.trim());
+                    }
+                }
+            } catch(e) { /* sidebar not open, ignore */ }
+
             const isStreaming = wrapper ? !!wrapper.querySelector(SEL.chat.streamingIndicator) : false;
-            return { messages: collected, isFull: false, isStreaming, scrollInfo: { scrollTop: chatScroll.scrollTop, scrollHeight, clientHeight } };
+            return { messages: collected, isFull: false, isStreaming, availableArtifacts, scrollInfo: { scrollTop: chatScroll.scrollTop, scrollHeight, clientHeight } };
         } catch(e) { return { error: e.toString() }; }
     })()`;
     for (const ctx of cdp.contexts) {

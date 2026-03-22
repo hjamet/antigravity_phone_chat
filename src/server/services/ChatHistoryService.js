@@ -7,6 +7,7 @@ export class ChatHistoryService {
         this.isStreaming = false;
         this.scrollInfo = null;
         this.ignoreUntil = 0;
+        this.availableArtifacts = [];
     }
 
     /**
@@ -93,6 +94,9 @@ export class ChatHistoryService {
 
         this.isStreaming = validSnapshot.isStreaming || false;
         this.scrollInfo = validSnapshot.scrollInfo || null;
+        if (validSnapshot.availableArtifacts && validSnapshot.availableArtifacts.length > 0) {
+            this.availableArtifacts = validSnapshot.availableArtifacts;
+        }
 
         for (const msg of (validSnapshot.messages || [])) {
             if (msg.type === 'taskBlock') {
@@ -295,7 +299,10 @@ export class ChatHistoryService {
                 title: m.taskTitle || null,
                 status: m.taskStatus || null,
                 allStatuses: ChatHistoryService._filterCleanStatuses(m.allStatuses || [])
-            }))
+            })),
+
+            // Available artifacts from sidebar
+            availableArtifacts: this.availableArtifacts || []
         };
     }
 

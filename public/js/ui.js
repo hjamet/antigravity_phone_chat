@@ -108,6 +108,9 @@ export function renderChatState(state) {
     updateStreamingIndicator(state.isStreaming);
     window.isAgentStreaming = state.isStreaming;
 
+    // Artifact quick-access bar
+    updateArtifactBar(state.availableArtifacts || []);
+
     // Only auto-scroll if something changed AND user was near the bottom
     if (anyChanged && isNearBottom) {
         requestAnimationFrame(() => {
@@ -116,6 +119,41 @@ export function renderChatState(state) {
     }
     
     return container;
+}
+
+/**
+ * Show/hide the artifact quick-access bar at the bottom of the chat
+ */
+function updateArtifactBar(artifacts) {
+    let bar = document.getElementById('artifactBar');
+    
+    if (!artifacts || artifacts.length === 0) {
+        if (bar) bar.remove();
+        return;
+    }
+
+    const key = artifacts.join(',');
+    if (bar && bar.getAttribute('data-key') === key) return; // No change
+
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'artifactBar';
+        bar.className = 'artifact-bar';
+        // Insert before the input area (after chatContainer)
+        const chatContainer = document.getElementById('chatContainer');
+        if (chatContainer) {
+            chatContainer.parentElement.insertBefore(bar, chatContainer.nextSibling);
+        }
+    }
+
+    bar.setAttribute('data-key', key);
+    bar.innerHTML = artifacts.map(name => {
+        const encoded = encodeURIComponent(name);
+        return `<button class="artifact-bar-btn" onclick="window._openArtifact && window._openArtifact('${encoded}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span>${escapeHtml(name)}</span>
+        </button>`;
+    }).join('');
 }
 
 /**

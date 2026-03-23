@@ -89,7 +89,7 @@ function playNextTTSChunk() {
     if (!audioEl) return;
     
     audioEl.src = url;
-    audioEl.playbackRate = 1.35; // Accelerate TTS playback
+    audioEl.playbackRate = 1.3; // Accelerate TTS playback
     audioEl.onended = () => {
         playNextTTSChunk();
     };

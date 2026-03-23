@@ -33,7 +33,7 @@ L'application agit comme un proxy intelligent :
 - **Frontend (ES Modules)** : Interface découpée en modules indépendants (`public/js/`) — seuls les 2 derniers messages (user + agent) sont affichés.
 - **Fix New Chat** : Support complet de la page "Nouvelle Conversation" (DOM vide) et envoi de message.
 - **Extraction Intelli** : Capture des blocs tâches, réflexions et messages directes de l'agent.
-- **Artefacts & Commentaires** : Visualisation des artefacts Antigravity avec rendu markdown fidèle. Ajout de **commentaires contextuels rapides** (sélection de texte → highlight jaune souligné + badge compteur). Cliquer sur un highlight ouvre un popover pour éditer/supprimer. Les commentaires sont injectés en XML au prochain envoi de message. Boutons d'accès rapide aux artefacts.
+- **Artefacts & Commentaires** : Visualisation des artefacts Antigravity avec rendu markdown fidèle. Ajout de **commentaires contextuels rapides** : sélection de texte → highlight jaune visible (bordure + icône 💬) + badge compteur. Cliquer/taper un highlight ouvre un popover pour éditer/supprimer. **Support mobile complet** : sélection tactile détectée via `touchend` + `selectionchange`, popover positionné en `fixed` avec gestion above/below. Les commentaires sont injectés en XML au prochain envoi de message.
 - **Injection Message Fiable** : Envoi de messages via CDP avec 3 stratégies d'insertion (single `execCommand`, paste simulation, DOM direct) évitant les troncatures de messages longs.
 - **Smart Scrolling** : Scroll forcé dans l'Agent Manager (CDP). Interface web avec auto-scroll intelligent (seulement si en bas) et notification toast « ✅ Réponse reçue » à la fin du streaming.
 - **Diagnostic Erreur Sélecteur** : En cas de sélecteur cassé, une bannière "Streamlit-like" apparaît sur le web avec un rapport LLM-ready et un snapshot du DOM complet. Arrêt automatique du polling serveur sur erreur.
@@ -51,6 +51,7 @@ L'application agit comme un proxy intelligent :
 | Smart Scrolling & Notifications | ✅ Nouveau | CDP + Frontend |
 | Selector Error Diagnostics | ✅ Nouveau | CDP + WebSocket |
 | PWA Installable | ✅ Nouveau | manifest.json + sw.js |
+| Lecture Auto TTS | ✅ Nouveau | Web Speech API |
 
 ## 6. # Documentation Index
 | Titre (Lien) | Description |
@@ -128,6 +129,9 @@ L'application agit comme un proxy intelligent :
 | 30 | **Diagnostic Erreur Sélecteur** | ✅ Fait | [cdp-selector-diagnostics.md](docs/tasks/cdp-selector-diagnostics.md) |
 | 31 | **Auto-Retry Agent** | ✅ Fait | — |
 | 32 | **Fix Panneau Artefacts** | ✅ Fait | — |
+| 33 | **Démonstration Artefacts** | ✅ Fait | [demo-artifacts.md](docs/tasks/demo-artifacts.md) |
+| 34 | **Lecture Auto TTS** | ✅ Fait | [tts-auto-read.md](docs/tasks/tts-auto-read.md) |
+| 35 | **Fix State Switch Conversation** | ✅ Fait | [fix-chat-switch-state.md](docs/tasks/fix-chat-switch-state.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

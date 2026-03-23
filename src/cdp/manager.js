@@ -253,7 +253,8 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                 } catch(e) { }
             }
 
-            const isStreaming = wrapper ? !!wrapper.querySelector(SEL.chat.streamingIndicator) : false;
+            const cancelBtn = document.querySelector(SEL.controls.cancelButton);
+            const isStreaming = !!(cancelBtn && cancelBtn.offsetParent !== null);
 
             // --- Conversation Finished Detection (green dot on active pill) ---
             let conversationFinished = false;

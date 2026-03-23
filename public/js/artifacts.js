@@ -88,8 +88,9 @@ export async function openArtifactViewer(name) {
             }
         }
 
-        // Re-apply any existing highlights for this artifact
-        reapplyHighlights();
+        // Render the draft comments section
+        renderDraftList();
+        updateSendButton();
 
         // Update header info
         const proceedBtn = document.getElementById('artifactProceedBtn');
@@ -108,7 +109,6 @@ export function closeArtifactViewer() {
     const viewer = document.getElementById('artifactViewer');
     if (viewer) viewer.classList.remove('open');
     currentArtifact = null;
-    closeReviewPopover();
 }
 
 /**
@@ -137,10 +137,10 @@ export function flushDraftComments() {
         xml += `</artifact_comment>\n\n`;
     });
     
-    // Clear drafts and highlights
+    // Clear drafts and update UI
     draftComments = [];
-    clearAllHighlights();
-    updateBadge();
+    updateSendButton();
+    renderDraftList();
     return xml.trim();
 }
 
@@ -159,19 +159,6 @@ export function getDraftCommentCount() {
  * @returns {Promise<boolean>} Success status
  */
 export async function submitArtifactComment(selectedText = null, commentText = null) {
-    let textarea, btn, isContextual = false;
-    
-    if (selectedText !== null && commentText !== null) {
-        // Contextual comment from inline popover
-        isContextual = true;
-    } else {
-        // Global comment from sidebar
-        textarea = document.getElementById('artifactCommentInput');
-        btn = document.getElementById('artifactCommentSubmit');
-        if (!textarea) return false;
-        commentText = textarea.value.trim();
-    }
-
     if (!commentText || !currentArtifact) return false;
 
     const idx = _commentIdx++;
@@ -179,283 +166,181 @@ export async function submitArtifactComment(selectedText = null, commentText = n
     // Push to drafts
     draftComments.push({
         artifact: currentArtifact,
-        selectedText: isContextual ? selectedText : null,
+        selectedText: selectedText,
         comment: commentText,
         idx
     });
 
-    if (!isContextual && textarea) textarea.value = '';
-    
-    // Add visual highlight if contextual
-    if (isContextual && selectedText) {
-        highlightSelection(selectedText, commentText, idx);
-    }
-
-    // Update badge
-    updateBadge();
-
-    // Provide visual feedback for global comments
-    if (btn && !isContextual) {
-        const originalText = btn.textContent;
-        btn.textContent = '✓ Saved in draft';
-        btn.classList.add('success');
-        setTimeout(() => { 
-            btn.textContent = 'Add Comment'; 
-            btn.classList.remove('success');
-        }, 2000);
-    }
+    // Update UI
+    updateSendButton();
+    renderDraftList();
 
     return true;
 }
 
-// ========== HIGHLIGHT SYSTEM ==========
+// ========== DRAFT COMMENTS UI ==========
 
 /**
- * Highlight the currently selected text in the artifact viewer content.
+ * Render the list of draft comments at the bottom of the viewer.
  */
-function highlightSelection(selectedText, commentText, idx) {
-    const contentEl = document.getElementById('artifactViewerContent');
-    if (!contentEl) return;
-
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-
-    const range = sel.getRangeAt(0);
-    
-    // Check range is inside the viewer
-    if (!contentEl.contains(range.commonAncestorContainer)) return;
-
-    try {
-        const mark = document.createElement('mark');
-        mark.className = 'artifact-comment-highlight';
-        mark.dataset.commentIdx = String(idx);
-        mark.title = commentText.length > 60 ? commentText.substring(0, 57) + '...' : commentText;
-        
-        range.surroundContents(mark);
-
-        // Attach click handler
-        mark.addEventListener('click', (e) => {
-            e.stopPropagation();
-            showReviewPopover(mark, idx);
-        });
-    } catch (e) {
-        // surroundContents fails if range crosses element boundaries
-        // Fallback: just store the comment without visual highlight
-        console.warn('[Artifacts] Could not highlight across element boundaries, comment saved without visual mark.');
-    }
-
-    sel.removeAllRanges();
-}
-
-/**
- * Re-apply highlights when re-opening the same artifact (if comments still exist).
- * Since the DOM is replaced on open, we attempt text-based matching.
- */
-function reapplyHighlights() {
+function renderDraftList() {
     const contentEl = document.getElementById('artifactViewerContent');
     if (!contentEl || !currentArtifact) return;
 
-    const relevantDrafts = draftComments.filter(d => d.artifact === currentArtifact && d.selectedText);
-    
-    for (const draft of relevantDrafts) {
-        // Try to find and highlight the text in the DOM
-        const found = findAndWrapText(contentEl, draft.selectedText, draft.comment, draft.idx);
-        if (!found) {
-            console.warn(`[Artifacts] Could not re-highlight: "${draft.selectedText.substring(0, 30)}..."`);
-        }
+    // Remove existing section if any
+    const existing = document.getElementById('draftCommentsSection');
+    if (existing) existing.remove();
+
+    const drafts = draftComments.filter(d => d.artifact === currentArtifact);
+
+    const section = document.createElement('div');
+    section.id = 'draftCommentsSection';
+    section.className = 'draft-comments-section';
+
+    if (drafts.length > 0) {
+        const title = document.createElement('h3');
+        title.innerHTML = '📝 Draft Comments';
+        section.appendChild(title);
+
+        drafts.forEach(draft => {
+            const card = document.createElement('div');
+            card.className = 'draft-comment-card';
+            
+            // If we are in edit mode
+            if (draft._isEditing) {
+                const quoteHtml = draft.selectedText
+                    ? `<div class="draft-comment-quote">"${escapeHtml(draft.selectedText.length > 80 ? draft.selectedText.substring(0, 77) + '...' : draft.selectedText)}"</div>`
+                    : '';
+                
+                card.innerHTML = `
+                    ${quoteHtml}
+                    <textarea class="crp-edit-input">${escapeHtml(draft.comment)}</textarea>
+                    <div class="draft-comment-actions">
+                        <button class="draft-action-btn cancel-edit">Cancel</button>
+                        <button class="draft-action-btn save-edit" style="color: #8b5cf6;">Save</button>
+                    </div>
+                `;
+
+                const input = card.querySelector('.crp-edit-input');
+                // Auto focus
+                setTimeout(() => input.focus(), 50);
+
+                card.querySelector('.cancel-edit').onclick = () => {
+                    draft._isEditing = false;
+                    renderDraftList();
+                };
+
+                card.querySelector('.save-edit').onclick = () => {
+                    const newText = input.value.trim();
+                    if (newText) {
+                        draft.comment = newText;
+                    }
+                    draft._isEditing = false;
+                    renderDraftList();
+                };
+            } else {
+                // Normal view mode
+                const quoteHtml = draft.selectedText
+                    ? `<div class="draft-comment-quote">"${escapeHtml(draft.selectedText.length > 100 ? draft.selectedText.substring(0, 97) + '...' : draft.selectedText)}"</div>`
+                    : '';
+                
+                card.innerHTML = `
+                    ${quoteHtml}
+                    <div class="draft-comment-body">${escapeHtml(draft.comment).replace(/\n/g, '<br>')}</div>
+                    <div class="draft-comment-actions">
+                        <button class="draft-action-btn edit">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                            Edit
+                        </button>
+                        <button class="draft-action-btn delete">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            Delete
+                        </button>
+                    </div>
+                `;
+
+                card.querySelector('.edit').onclick = () => {
+                    draft._isEditing = true;
+                    renderDraftList();
+                };
+
+                card.querySelector('.delete').onclick = () => {
+                    deleteComment(draft.idx);
+                };
+            }
+
+            section.appendChild(card);
+        });
     }
+
+    // Add general comment button
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-general-comment-btn';
+    addBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        Add General Comment
+    `;
+    addBtn.onclick = () => {
+        // Create an empty draft in edit mode
+        const idx = _commentIdx++;
+        draftComments.push({
+            artifact: currentArtifact,
+            selectedText: null,
+            comment: '',
+            idx,
+            _isEditing: true
+        });
+        updateSendButton();
+        renderDraftList();
+        
+        // Scroll to bottom
+        setTimeout(() => {
+            contentEl.scrollTop = contentEl.scrollHeight;
+        }, 50);
+    };
+    section.appendChild(addBtn);
+
+    contentEl.appendChild(section);
 }
 
 /**
- * Walk the DOM text nodes and wrap the first occurrence of `searchText`.
+ * Delete a draft comment
  */
-function findAndWrapText(root, searchText, commentText, idx) {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
-    let node;
-    
-    // Try finding in a single text node first
-    while ((node = walker.nextNode())) {
-        const pos = node.textContent.indexOf(searchText);
-        if (pos === -1) continue;
-        
-        const range = document.createRange();
-        range.setStart(node, pos);
-        range.setEnd(node, pos + searchText.length);
-        
-        const mark = document.createElement('mark');
-        mark.className = 'artifact-comment-highlight';
-        mark.dataset.commentIdx = String(idx);
-        mark.title = commentText.length > 60 ? commentText.substring(0, 57) + '...' : commentText;
-        
-        try {
-            range.surroundContents(mark);
-            mark.addEventListener('click', (e) => {
-                e.stopPropagation();
-                showReviewPopover(mark, idx);
-            });
-            return true;
-        } catch (e) {
-            return false;
-        }
-    }
-    return false;
+function deleteComment(idx) {
+    draftComments = draftComments.filter(d => d.idx !== idx);
+    updateSendButton();
+    renderDraftList();
 }
 
 /**
- * Remove all highlights from the viewer content.
+ * Update the visibility of the Send Comments button
  */
-function clearAllHighlights() {
-    const contentEl = document.getElementById('artifactViewerContent');
-    if (!contentEl) return;
-    
-    contentEl.querySelectorAll('.artifact-comment-highlight').forEach(mark => {
-        const parent = mark.parentNode;
-        while (mark.firstChild) {
-            parent.insertBefore(mark.firstChild, mark);
-        }
-        parent.removeChild(mark);
-        parent.normalize();
-    });
-}
-
-/**
- * Update the comment count badge.
- */
-function updateBadge() {
-    const badge = document.getElementById('commentCountBadge');
-    if (!badge) return;
+function updateSendButton() {
+    const btn = document.getElementById('sendCommentsBtn');
+    if (!btn) return;
     
     const count = draftComments.length;
-    badge.textContent = String(count);
-    badge.style.display = count > 0 ? 'inline-flex' : 'none';
-}
-
-// ========== REVIEW POPOVER ==========
-
-/**
- * Show a review popover on a highlighted comment.
- */
-function showReviewPopover(markEl, idx) {
-    closeReviewPopover();
-
-    const draft = draftComments.find(d => d.idx === idx);
-    if (!draft) return;
-
-    const popover = document.createElement('div');
-    popover.id = 'commentReviewPopover';
-    popover.className = 'comment-review-popover';
-
-    const quoteText = draft.selectedText
-        ? (draft.selectedText.length > 80 ? draft.selectedText.substring(0, 77) + '...' : draft.selectedText)
-        : '';
-
-    popover.innerHTML = `
-        ${quoteText ? `<div class="crp-quote">"${escapeHtml(quoteText)}"</div>` : ''}
-        <div class="crp-comment">${escapeHtml(draft.comment)}</div>
-        <div class="crp-actions">
-            <button class="crp-btn edit">Edit</button>
-            <button class="crp-btn delete">Delete</button>
-        </div>
-    `;
-
-    // Position near the mark
-    const rect = markEl.getBoundingClientRect();
-    document.body.appendChild(popover);
-    
-    popover.style.top = (rect.bottom + window.scrollY + 8) + 'px';
-    popover.style.left = Math.max(10, Math.min(
-        rect.left + window.scrollX,
-        window.innerWidth - 300
-    )) + 'px';
-
-    // Edit button
-    popover.querySelector('.crp-btn.edit').onclick = (e) => {
-        e.stopPropagation();
-        showEditMode(popover, draft, markEl);
-    };
-
-    // Delete button
-    popover.querySelector('.crp-btn.delete').onclick = (e) => {
-        e.stopPropagation();
-        deleteComment(idx, markEl);
-        closeReviewPopover();
-    };
-
-    // Close on outside click (delayed to avoid immediate close)
-    setTimeout(() => {
-        const closeHandler = (ev) => {
-            if (!popover.contains(ev.target) && ev.target !== markEl) {
-                closeReviewPopover();
-                document.removeEventListener('mousedown', closeHandler);
-                document.removeEventListener('touchstart', closeHandler);
-            }
-        };
-        document.addEventListener('mousedown', closeHandler);
-        document.addEventListener('touchstart', closeHandler, { passive: true });
-    }, 50);
-}
-
-/**
- * Switch the review popover to edit mode.
- */
-function showEditMode(popover, draft, markEl) {
-    const quoteText = draft.selectedText
-        ? (draft.selectedText.length > 80 ? draft.selectedText.substring(0, 77) + '...' : draft.selectedText)
-        : '';
-
-    popover.innerHTML = `
-        ${quoteText ? `<div class="crp-quote">"${escapeHtml(quoteText)}"</div>` : ''}
-        <textarea class="crp-edit-input">${escapeHtml(draft.comment)}</textarea>
-        <div class="crp-actions">
-            <button class="crp-btn cancel-edit">Cancel</button>
-            <button class="crp-btn save">Save</button>
-        </div>
-    `;
-
-    const input = popover.querySelector('.crp-edit-input');
-    input.focus();
-
-    popover.querySelector('.crp-btn.cancel-edit').onclick = (e) => {
-        e.stopPropagation();
-        closeReviewPopover();
-    };
-
-    popover.querySelector('.crp-btn.save').onclick = (e) => {
-        e.stopPropagation();
-        const newText = input.value.trim();
-        if (newText) {
-            draft.comment = newText;
-            markEl.title = newText.length > 60 ? newText.substring(0, 57) + '...' : newText;
-        }
-        closeReviewPopover();
-    };
-}
-
-/**
- * Delete a draft comment and remove its highlight.
- */
-function deleteComment(idx, markEl) {
-    draftComments = draftComments.filter(d => d.idx !== idx);
-    
-    // Unwrap the mark element
-    if (markEl && markEl.parentNode) {
-        const parent = markEl.parentNode;
-        while (markEl.firstChild) {
-            parent.insertBefore(markEl.firstChild, markEl);
-        }
-        parent.removeChild(markEl);
-        parent.normalize();
+    btn.style.display = count > 0 ? 'flex' : 'none';
+    if (count > 0) {
+        btn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+            Send ${count} Comment${count > 1 ? 's' : ''}
+        `;
     }
-    
-    updateBadge();
 }
 
 /**
- * Close any open review popover.
+ * Send all drafted comments using the main chat input flow
  */
-function closeReviewPopover() {
-    const existing = document.getElementById('commentReviewPopover');
-    if (existing) existing.remove();
+export function sendAllComments() {
+    if (draftComments.length === 0) return;
+    if (window._doSend) {
+        window._doSend();
+        closeArtifactViewer();
+    }
 }
 
 // ========== TEXT SELECTION HANDLER ==========
@@ -500,9 +385,11 @@ function handleTextSelection() {
         </button>
     `;
 
-    // Handle clicking the comment button
-    popover.querySelector('.inline-comment-trigger').onclick = (e) => {
+    // Handle clicking the comment button — use both click and touchend for mobile
+    const triggerBtn = popover.querySelector('.inline-comment-trigger');
+    const expandPopover = (e) => {
         e.stopPropagation();
+        e.preventDefault();
         
         // Expand into a small textarea
         popover.classList.add('expanded');
@@ -518,18 +405,19 @@ function handleTextSelection() {
         `;
         
         const input = popover.querySelector('.inline-comment-input');
-        input.focus();
+        // Delay focus slightly on mobile to prevent keyboard issues
+        setTimeout(() => input.focus(), 100);
 
-        popover.querySelector('.cancel').onclick = (e) => {
-            e.stopPropagation();
+        popover.querySelector('.cancel').onclick = (ev) => {
+            ev.stopPropagation();
             popover.style.display = 'none';
             popover.classList.remove('expanded');
             window.getSelection().removeAllRanges();
         };
 
         const submitBtn = popover.querySelector('.submit');
-        submitBtn.onclick = async (e) => {
-            e.stopPropagation();
+        submitBtn.onclick = async (ev) => {
+            ev.stopPropagation();
             const commentVal = input.value.trim();
             if (!commentVal) return;
             
@@ -546,6 +434,8 @@ function handleTextSelection() {
             }
         };
     };
+    triggerBtn.onclick = expandPopover;
+    triggerBtn.addEventListener('touchend', expandPopover, { passive: false });
 }
 
 /**
@@ -564,16 +454,8 @@ export function initArtifacts() {
     // Close viewer button
     document.getElementById('artifactViewerClose')?.addEventListener('click', closeArtifactViewer);
 
-    // Comment submit
-    document.getElementById('artifactCommentSubmit')?.addEventListener('click', submitArtifactComment);
-
-    // Enter key in comment textarea
-    document.getElementById('artifactCommentInput')?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            submitArtifactComment(null, null); // Global comment
-        }
-    });
+    // Send Comments button
+    document.getElementById('sendCommentsBtn')?.addEventListener('click', sendAllComments);
 
     // Handle contextual comment selection
     const viewerContent = document.getElementById('artifactViewerContent');
@@ -583,29 +465,43 @@ export function initArtifacts() {
             if (e.key === 'Shift' || e.key.includes('Arrow')) handleTextSelection();
         });
         
-        // Support for mobile text selection
+        // Mobile: direct touchend on viewer to capture selection after finger lifts
+        viewerContent.addEventListener('touchend', () => {
+            clearTimeout(window._selTimeout);
+            window._selTimeout = setTimeout(handleTextSelection, 350);
+        }, { passive: true });
+
+        // Support for mobile text selection via selectionchange
         document.addEventListener('selectionchange', () => {
             const sel = window.getSelection();
-            if (sel && sel.rangeCount > 0) {
+            if (sel && sel.rangeCount > 0 && sel.toString().trim().length > 0) {
                 const node = sel.anchorNode;
                 if (viewerContent.contains(node)) {
                     clearTimeout(window._selTimeout);
-                    window._selTimeout = setTimeout(handleTextSelection, 400);
+                    window._selTimeout = setTimeout(handleTextSelection, 600);
                 }
             }
         });
     }
 
     // Hide inline popover when clicking outside
+    // Excludes clicks on highlights (they have their own handler)
     const hidePopover = (e) => {
         const popover = document.getElementById('artifact-inline-popover');
-        if (popover && !popover.contains(e.target)) {
-            popover.style.display = 'none';
-            popover.classList.remove('expanded');
-        }
+        if (!popover) return;
+        if (popover.contains(e.target)) return;
+        // Don't hide if clicking on a comment highlight — it has its own click handler
+        if (e.target.closest && e.target.closest('.artifact-comment-highlight')) return;
+        popover.style.display = 'none';
+        popover.classList.remove('expanded');
     };
     document.addEventListener('mousedown', hidePopover);
-    document.addEventListener('touchstart', hidePopover, { passive: true });
+    // Use touchend instead of touchstart on mobile — touchstart fires BEFORE onclick
+    // which would kill the popover before the comment trigger can be clicked
+    document.addEventListener('touchend', (e) => {
+        // Small delay to let click/touchend handlers on the popover fire first
+        setTimeout(() => hidePopover(e), 150);
+    }, { passive: true });
 
     // Proceed button
     document.getElementById('artifactProceedBtn')?.addEventListener('click', async () => {

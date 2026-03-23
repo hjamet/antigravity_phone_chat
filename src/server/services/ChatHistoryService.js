@@ -98,7 +98,7 @@ export class ChatHistoryService {
         this.isStreaming = validSnapshot.isStreaming || false;
         this.conversationFinished = validSnapshot.conversationFinished || false;
         this.scrollInfo = validSnapshot.scrollInfo || null;
-        if (validSnapshot.availableArtifacts && validSnapshot.availableArtifacts.length > 0) {
+        if (validSnapshot.availableArtifacts !== undefined) {
             this.availableArtifacts = validSnapshot.availableArtifacts;
         }
 

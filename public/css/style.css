@@ -1569,6 +1569,24 @@ textarea::-webkit-scrollbar {
 }
 .artifact-proceed-btn:active { transform: scale(0.95); }
 
+.send-comments-btn {
+    background: var(--accent-gradient);
+    color: #fff;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.send-comments-btn:hover { opacity: 0.9; }
+.send-comments-btn:active { transform: scale(0.95); }
+.send-comments-btn svg { width: 14px; height: 14px; }
+
 .artifact-viewer-body {
     flex: 1;
     overflow-y: auto;
@@ -1703,48 +1721,126 @@ textarea::-webkit-scrollbar {
     margin-bottom: 4px;
 }
 
-/* Comment input bar at bottom of viewer */
-.artifact-comment-bar {
+/* ===== Draft Comments Section (bottom of viewer) ===== */
+.draft-comments-section {
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(139, 92, 246, 0.2);
     display: flex;
-    gap: 8px;
-    align-items: flex-end;
-    padding: 10px 16px;
-    border-top: 1px solid var(--border);
-    background: var(--bg-panel);
-    padding-bottom: max(10px, env(safe-area-inset-bottom));
-    flex-shrink: 0;
+    flex-direction: column;
+    gap: 16px;
 }
-.artifact-comment-bar textarea {
-    flex: 1;
-    background: var(--bg-input) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 12px !important;
-    padding: 10px 14px !important;
-    font-size: 14px;
-    color: var(--text-main) !important;
-    resize: none;
-    min-height: 40px;
-    max-height: 100px;
-    line-height: 1.4;
-}
-.artifact-comment-send {
-    background: var(--accent-gradient);
-    color: #fff;
-    border: none;
-    padding: 10px 16px;
-    border-radius: 12px;
-    font-size: 13px;
+.draft-comments-section h3 {
+    font-size: 15px;
     font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.2s;
-    flex-shrink: 0;
+    color: #e2e8f0;
+    margin: 0 0 4px 0 !important;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
-.artifact-comment-send:hover { opacity: 0.9; }
-.artifact-comment-send:active { transform: scale(0.95); }
-.artifact-comment-send:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+
+.draft-comment-card {
+    background: rgba(17, 17, 27, 0.6);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    backdrop-filter: blur(8px);
+    transition: border-color 0.2s;
+}
+.draft-comment-card:hover {
+    border-color: rgba(139, 92, 246, 0.4);
+}
+
+.draft-comment-quote {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+    border-left: 2px solid rgba(139, 92, 246, 0.5);
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 0 6px 6px 0;
+    margin: 0 !important;
+}
+
+.draft-comment-body {
+    font-size: 14px;
+    color: var(--text-main);
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.draft-comment-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.draft-action-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+.draft-action-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+}
+.draft-action-btn.edit:hover { color: #a78bfa; background: rgba(139, 92, 246, 0.1); }
+.draft-action-btn.delete:hover { color: #f87171; background: rgba(239, 68, 68, 0.1); }
+
+/* Edit mode inside draft card */
+.draft-comment-card .crp-edit-input {
+    width: 100%;
+    min-height: 80px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    border-radius: 8px;
+    padding: 10px;
+    color: var(--text-main);
+    font-size: 14px;
+    resize: vertical;
+    outline: none;
+    font-family: inherit;
+}
+.draft-comment-card .crp-edit-input:focus {
+    border-color: rgba(139, 92, 246, 0.8);
+}
+
+.add-general-comment-btn {
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px dashed rgba(139, 92, 246, 0.3);
+    color: #a78bfa;
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: inherit;
+    width: 100%;
+    margin-top: 8px;
+}
+.add-general-comment-btn:hover {
+    background: rgba(139, 92, 246, 0.15);
+    border-color: rgba(139, 92, 246, 0.5);
 }
 
 /* Inline artifact reference cards in chat messages */
@@ -1991,17 +2087,34 @@ textarea::-webkit-scrollbar {
 
 /* ===== Persistent Comment Highlights in Artifact Viewer ===== */
 .artifact-comment-highlight {
-    background: rgba(250, 204, 21, 0.18);
-    text-decoration: underline;
-    text-decoration-color: rgba(250, 204, 21, 0.6);
-    text-underline-offset: 2px;
+    background: rgba(250, 204, 21, 0.30);
+    border-bottom: 2px solid rgba(250, 204, 21, 0.7);
     cursor: pointer;
     border-radius: 2px;
-    transition: background 0.2s;
+    transition: background 0.2s, box-shadow 0.2s;
     position: relative;
+    padding: 1px 2px;
+    /* Larger touch target on mobile */
+    -webkit-tap-highlight-color: rgba(250, 204, 21, 0.15);
+}
+.artifact-comment-highlight::after {
+    content: '💬';
+    font-size: 10px;
+    position: relative;
+    top: -6px;
+    margin-left: 1px;
+    opacity: 0.7;
+    pointer-events: none;
 }
 .artifact-comment-highlight:hover {
-    background: rgba(250, 204, 21, 0.32);
+    background: rgba(250, 204, 21, 0.45);
+    box-shadow: 0 0 8px rgba(250, 204, 21, 0.3);
+}
+/* Bigger touch target on mobile for highlights */
+@media (max-width: 768px) {
+    .artifact-comment-highlight {
+        padding: 3px 2px;
+    }
 }
 
 /* Comment Review Popover (click on highlight) */
@@ -2093,21 +2206,7 @@ textarea::-webkit-scrollbar {
 }
 
 /* Comment Count Badge */
-.comment-count-badge {
-    background: rgba(250, 204, 21, 0.9);
-    color: #11111b;
-    font-size: 11px;
-    font-weight: 700;
-    min-width: 20px;
-    height: 20px;
-    border-radius: 10px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 6px;
-    margin-left: 6px;
-    flex-shrink: 0;
-}
+/* Comment Count Badge (Removed, replaced by Send Comments btn) */
 
 /* --- Selector Error Banner (Streamlit-like) --- */
 .selector-error-banner {

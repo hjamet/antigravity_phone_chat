@@ -17,11 +17,22 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css?v=10">
+    <link rel="stylesheet" href="/css/style.css?v=11">
     <!-- Marked.js for Markdown parsing -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- morphdom for flicker-free DOM diffing -->
     <script src="https://cdn.jsdelivr.net/npm/morphdom@2.6.2/dist/morphdom-umd.min.js"></script>
+    <script>
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            const el = document.querySelector('.loading-state p');
+            if (el) el.textContent = `FATAL: ${msg} at ${lineNo}:${columnNo}`;
+            return false;
+        };
+        window.addEventListener('unhandledrejection', function(event) {
+            const el = document.querySelector('.loading-state p');
+            if (el) el.textContent = `PROMISE REJECTED: ${event.reason}`;
+        });
+    </script>
 </head>
 
 <body>
@@ -96,6 +107,18 @@
                 <path d="M12 8h.01" />
             </svg>
             <span id="modelText">Select Model</span>
+        </div>
+        <div class="setting-chip" id="ttsBtn" title="Lecture audio automatique du dernier message">
+            <svg id="ttsIconOn" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+            <svg id="ttsIconOff" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none; opacity:0.6;">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <line x1="23" y1="9" x2="17" y2="15"></line>
+                <line x1="17" y1="9" x2="23" y2="15"></line>
+            </svg>
+            <span id="ttsText">TTS On</span>
         </div>
         <div class="setting-chip" id="syncStats" style="cursor: default; border: none; background: transparent;">
             <span id="statsText" style="font-size: 10px; opacity: 0.6;">Syncing...</span>
@@ -239,18 +262,20 @@
                 </svg>
             </button>
             <span class="artifact-viewer-title" id="artifactViewerTitle">Artifact</span>
-            <span id="commentCountBadge" class="comment-count-badge" style="display:none;">0</span>
+            <button class="send-comments-btn" id="sendCommentsBtn" style="display:none;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+                Send Comments
+            </button>
             <button class="artifact-proceed-btn" id="artifactProceedBtn" style="display:none;">Proceed</button>
         </div>
         <div class="artifact-viewer-body" id="artifactViewerContent">
         </div>
-        <div class="artifact-comment-bar">
-            <textarea id="artifactCommentInput" placeholder="Add a comment..." rows="1"></textarea>
-            <button id="artifactCommentSubmit" class="artifact-comment-send">Add Comment</button>
-        </div>
     </div>
 
-    <script type="module" src="/js/main.js?v=13"></script>
+    <script type="module" src="/js/main.js?v=14"></script>
 
     <!-- PWA: Service Worker Registration & Install Banner -->
     <div id="installBanner" style="display:none; position:fixed; bottom:80px; left:50%; transform:translateX(-50%); z-index:9999; background:linear-gradient(135deg, #7c3aed, #6d28d9); color:#fff; padding:12px 20px; border-radius:16px; box-shadow:0 8px 32px rgba(124,58,237,0.4); font-family:'Inter',sans-serif; font-size:14px; font-weight:500; cursor:pointer; display:none; align-items:center; gap:10px; animation:slideUpBanner .4s ease-out;">
@@ -265,7 +290,7 @@
         // Service Worker registration
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=2')
+                navigator.serviceWorker.register('/sw.js?v=3')
                     .then(reg => console.log('[PWA] SW registered, scope:', reg.scope))
                     .catch(err => console.warn('[PWA] SW registration failed:', err));
             });

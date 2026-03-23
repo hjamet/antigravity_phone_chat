@@ -1,5 +1,5 @@
 // Service Worker for Antigravity Connect PWA
-const CACHE_NAME = 'ag-connect-v2';
+const CACHE_NAME = 'ag-connect-v3';
 
 // Static assets to pre-cache on install
 const PRECACHE_ASSETS = [
@@ -40,8 +40,14 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
+        // Do not cache API requests or snapshots
+        const urlStr = event.request.url;
+        if (urlStr.includes('/api/') || urlStr.includes('/snapshot') || urlStr.includes('/chat-state')) {
+            return networkResponse;
+        }
+
         // Cache successful responses for future offline use
-        if (networkResponse.ok && event.request.url.startsWith(self.location.origin)) {
+        if (networkResponse.ok && urlStr.startsWith(self.location.origin)) {
           const responseClone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseClone);

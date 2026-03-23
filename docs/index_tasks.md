@@ -28,3 +28,6 @@
 | [Fix Erreur Syntaxe Démarrage](tasks/fix-startup-syntax-error.md) | Correction de la SyntaxError dans `ChatHistoryService.js` | 2026-03-22 | `Up to date` |
 | [Notifications OS Natives](tasks/add_native_notifications.md) | Ajout des notifications push au niveau de l'OS fin de génération | 2026-03-22 | `Up to date` |
 | [Diagnostic Erreur Sélecteur](tasks/cdp-selector-diagnostics.md) | Affichage Streamlit-like et rapport LLM-ready | 2026-03-23 | `Up to date` |
+| [Démonstration Artefacts](tasks/demo-artifacts.md) | Session de test et présentation des artefacts | 2026-03-23 | `Up to date` |
+| [Lecture Auto TTS](tasks/tts-auto-read.md) | Lecture vocale automatique de la réponse finale | 2026-03-23 | `Up to date` |
+| [Fix State Switch Conversation](tasks/fix-chat-switch-state.md) | Correction du chargement d'état (isStreaming, artefacts) lors d'un switch de conversation | 2026-03-23 | `Up to date` |

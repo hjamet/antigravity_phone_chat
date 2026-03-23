@@ -3,8 +3,8 @@
  * Phase 5: Polls /api/chat-state every second as primary update mechanism
  */
 
-import { initWS } from './ws.js?v=10';
-import { elements, renderChatState, renderSnapshot, updateStateUI, toggleLayer } from './ui.js?v=10';
+import { initWS } from './ws.js?v=11';
+import { elements, renderChatState, renderSnapshot, updateStateUI, toggleLayer } from './ui.js?v=11';
 import { sendMessage, stopGeneration, scrollToBottom } from './chat.js?v=10';
 import { loadHistory, startNewChat } from './history.js?v=10';
 import { loadProjects } from './projects.js?v=10';
@@ -21,6 +21,42 @@ import { handleSelectorError } from './selectorError.js?v=1';
  */
 let _lastPollJson = '';
 let _wasConversationFinished = false;
+let _isTtsEnabled = localStorage.getItem('antigravity_tts') !== 'false';
+
+/**
+ * Read text using Web Speech API TTS
+ */
+function playTTS(text) {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    
+    // Clean markdown before speaking
+    const cleanText = text
+        .replace(/```[\s\S]*?```/g, 'Bloc de code.')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/[#*_-]/g, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/\]\]/g, '')
+        .replace(/\[\[/g, '');
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.volume = 1;
+    window.speechSynthesis.speak(utterance);
+}
+
+/**
+ * Warmup TTS on user interaction (fixes mobile autoplay)
+ */
+let _ttsWarmedUp = false;
+function warmupTTS() {
+    if (!_ttsWarmedUp && window.speechSynthesis) {
+        const u = new SpeechSynthesisUtterance('');
+        u.volume = 0;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(u);
+        _ttsWarmedUp = true;
+    }
+}
 
 /**
  * Show a toast notification when the agent finishes responding.
@@ -82,11 +118,24 @@ async function pollChatState() {
             // Notify ONLY when conversationFinished transitions false→true
             if (data.conversationFinished && !_wasConversationFinished) {
                 showCompletionToast();
+                if (_isTtsEnabled && data.messages) {
+                    const finalMsgs = data.messages.filter(m => m.role !== 'user' && m.type !== 'taskBlock');
+                    if (finalMsgs.length > 0) {
+                        const finalMsg = finalMsgs[finalMsgs.length - 1];
+                        playTTS(finalMsg.content || '');
+                    }
+                }
             }
             _wasConversationFinished = !!data.conversationFinished;
         }
     } catch (e) {
-        // Server unreachable — silent fail, will retry next tick
+        // Display the error visually on the screen to debug the "infinite loading" bug
+        const loadingP = document.querySelector('.loading-state p');
+        if (loadingP) {
+            loadingP.textContent = `Error: ${e.message}. Retrying...`;
+        }
+        // Server unreachable or JSON parse failed — silent fail, will retry next tick
+        _lastPollJson = '';
     }
 }
 
@@ -153,6 +202,7 @@ async function init() {
     // 4. Unified send handler — prevents double-send with workflow prefix
     let _sendGuard = false;
     function doSend() {
+        warmupTTS();
         if ("Notification" in window && Notification.permission === "default") {
             Notification.requestPermission();
         }
@@ -184,6 +234,9 @@ async function init() {
         // Release guard after a short delay to block any duplicate trigger
         setTimeout(() => { _sendGuard = false; }, 1000);
     }
+    
+    // Expose for artifacts module
+    window._doSend = doSend;
 
     elements.sendBtn?.addEventListener('click', doSend);
     
@@ -356,6 +409,34 @@ async function init() {
         });
     });
 
+    // TTS toggle
+    function updateTtsUI() {
+        if (!elements.ttsBtn) return;
+        if (_isTtsEnabled) {
+            elements.ttsIconOn.style.display = 'block';
+            elements.ttsIconOff.style.display = 'none';
+            elements.ttsText.textContent = 'TTS On';
+            elements.ttsBtn.style.opacity = '1';
+        } else {
+            elements.ttsIconOn.style.display = 'none';
+            elements.ttsIconOff.style.display = 'block';
+            elements.ttsText.textContent = 'TTS Off';
+            elements.ttsBtn.style.opacity = '0.7';
+        }
+    }
+    
+    updateTtsUI();
+    
+    elements.ttsBtn?.addEventListener('click', () => {
+        warmupTTS();
+        _isTtsEnabled = !_isTtsEnabled;
+        localStorage.setItem('antigravity_tts', _isTtsEnabled);
+        updateTtsUI();
+        if (!_isTtsEnabled && window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
+    });
+
     // Global Close handlers
     window.hideChatHistory = () => toggleLayer(elements.historyLayer, false);
     window.hideProjects = () => toggleLayer(elements.projectsLayer, false);
@@ -365,6 +446,8 @@ async function init() {
         window.hideChatHistory();
         const { selectChat } = await import('./history.js');
         await selectChat(title);
+        _lastPollJson = '';
+        _wasConversationFinished = false;
         setTimeout(pollChatState, 1500);
     };
 

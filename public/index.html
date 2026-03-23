@@ -275,7 +275,7 @@
         </div>
     </div>
 
-    <script type="module" src="/js/main.js?v=16"></script>
+    <script type="module" src="/js/main.js?v=17"></script>
 
     <!-- PWA: Service Worker Registration & Install Banner -->
     <div id="installBanner" style="display:none; position:fixed; bottom:80px; left:50%; transform:translateX(-50%); z-index:9999; background:linear-gradient(135deg, #7c3aed, #6d28d9); color:#fff; padding:12px 20px; border-radius:16px; box-shadow:0 8px 32px rgba(124,58,237,0.4); font-family:'Inter',sans-serif; font-size:14px; font-weight:500; cursor:pointer; display:none; align-items:center; gap:10px; animation:slideUpBanner .4s ease-out;">
@@ -290,7 +290,7 @@
         // Service Worker registration
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js?v=5')
+                navigator.serviceWorker.register('/sw.js?v=6')
                     .then(reg => console.log('[PWA] SW registered, scope:', reg.scope))
                     .catch(err => console.warn('[PWA] SW registration failed:', err));
             });

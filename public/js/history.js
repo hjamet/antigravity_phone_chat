@@ -94,7 +94,7 @@ function renderHistory(chats) {
                     </svg>
                 </div>
             `;
-            item.onclick = () => selectChat(chat.title);
+            item.onclick = () => window.selectChat ? window.selectChat(chat.title) : selectChat(chat.title);
             groupEl.appendChild(item);
         });
         

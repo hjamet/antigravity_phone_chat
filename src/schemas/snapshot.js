@@ -18,7 +18,7 @@ export const taskBlockSchema = z.object({
     type: z.literal('taskBlock'),
     taskTitle: z.string().optional(),
     taskStatus: z.string().optional(),
-    taskSummary: z.string(),
+    taskSummary: z.string().nullable().optional(),
     allStatuses: z.array(z.string()).optional(),
     html: z.string().optional()
 });

@@ -985,19 +985,22 @@ export async function selectChat(cdp, chatTitle) {
             let lastValidRoot = document.body;
             const targetTitle = ${safeChatTitle};
 
-            // Ensure history panel is open
-            const navBtns = Array.from(document.querySelectorAll(SEL.sidebarNav.navButton))
-                .filter(d => d.offsetParent !== null);
-            const historyBtn = navBtns.find(btn => {
-                const icon = btn.querySelector(SEL.sidebarNav.googleSymbol);
-                return icon && icon.textContent.trim() === SEL.sidebarNav.historyIcon;
-            });
-            if (historyBtn) {
-                historyBtn.click();
-                await new Promise(r => setTimeout(r, 800));
-            }
+            let pills = document.querySelectorAll(SEL.history.conversationPill);
 
-            const pills = document.querySelectorAll(SEL.history.conversationPill);
+            // If sidebar not open, click the history button
+            if (pills.length === 0) {
+                const navBtns = Array.from(document.querySelectorAll(SEL.sidebarNav.navButton))
+                    .filter(d => d.offsetParent !== null);
+                const historyBtn = navBtns.find(btn => {
+                    const icon = btn.querySelector(SEL.sidebarNav.googleSymbol);
+                    return icon && icon.textContent.trim() === SEL.sidebarNav.historyIcon;
+                });
+                if (historyBtn) {
+                    historyBtn.click();
+                    await new Promise(r => setTimeout(r, 800));
+                    pills = document.querySelectorAll(SEL.history.conversationPill);
+                }
+            }
             let targetPill = null;
 
             for (const pill of pills) {

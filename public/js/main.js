@@ -6,7 +6,7 @@
 import { initWS } from './ws.js?v=11';
 import { elements, renderChatState, renderSnapshot, updateStateUI, toggleLayer } from './ui.js?v=11';
 import { sendMessage, stopGeneration, scrollToBottom } from './chat.js?v=10';
-import { loadHistory, startNewChat } from './history.js?v=10';
+import { loadHistory, startNewChat } from './history.js?v=12';
 import { loadProjects } from './projects.js?v=10';
 import { fetchWithAuth } from './api.js?v=10';
 import { initPicker, onTriggerChar, hidePicker, isPickerVisible, getWorkflowPrefix, clearWorkflow } from './picker.js?v=12';

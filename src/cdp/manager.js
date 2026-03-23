@@ -402,56 +402,20 @@ export async function injectMessage(cdp, text) {
             document.execCommand("selectAll", false, null);
             document.execCommand("delete", false, null);
 
-            // Convert newlines to HTML <br> tags for rich text pasting
-            const htmlText = textToInsert.replace(/\\n/g, '<br>');
+            // Simple insertText — proven to work reliably in CDP context
+            // Note: newlines ARE preserved in the Agent Manager editor with this approach
+            document.execCommand("insertText", false, textToInsert);
 
-            // Strategy 1: Simulate Rich Text Paste (Best for React/Draft.js/Lexical)
-            let inserted = false;
-            try {
-                const dt = new DataTransfer();
-                dt.setData('text/plain', textToInsert);
-                dt.setData('text/html', htmlText);
-                
-                const pasteEvt = new ClipboardEvent('paste', {
-                    bubbles: true,
-                    cancelable: true,
-                    clipboardData: dt
-                });
-                editor.dispatchEvent(pasteEvt);
-                
-                // Wait for React to process the paste
-                await new Promise(r => setTimeout(r, 150));
-                
-                if ((editor.textContent || '').length >= Math.min(textToInsert.length, 10)) {
-                    inserted = true;
-                }
-            } catch(e) { }
-
-            // Strategy 2: Fallback to execCommand insertHTML
-            if (!inserted) {
-                try {
-                    const ok = document.execCommand("insertHTML", false, htmlText);
-                    if (ok && (editor.textContent || '').length >= Math.min(textToInsert.length, 10)) {
-                        inserted = true;
-                    }
-                } catch(e) { }
-            }
-
-            // Strategy 3: Fallback to basic text insertion
-            if (!inserted) {
-                document.execCommand("insertText", false, textToInsert);
-            }
-
-            // Wait for React editor to stabilize
+            // Wait for React editor to process
             await new Promise(r => setTimeout(r, 300));
 
             const submitBtn = document.querySelector(SEL.controls.submitButton);
             if (submitBtn) {
                 submitBtn.click();
-                return { ok:true, method: inserted ? "rich_paste" : "fallback" };
+                return { ok:true, method: "insertText" };
             }
 
-            // Fallback to Enter key simulation
+            // Fallback to Enter key
             editor.dispatchEvent(new KeyboardEvent("keydown", { bubbles:true, key:"Enter", code:"Enter" }));
             editor.dispatchEvent(new KeyboardEvent("keyup", { bubbles:true, key:"Enter", code:"Enter" }));
 

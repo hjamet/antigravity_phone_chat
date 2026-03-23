@@ -21,6 +21,7 @@ import { handleSelectorError } from './selectorError.js?v=1';
  */
 let _lastPollJson = '';
 let _wasConversationFinished = false;
+let _wasStreaming = false;
 let _isTtsEnabled = localStorage.getItem('antigravity_tts') !== 'false';
 
 let _lastFinalMessageText = '';
@@ -153,8 +154,8 @@ async function pollChatState() {
             if (!data.isStreaming) {
                 window.dispatchEvent(new Event('agent-stopped-streaming'));
             }
-            // Notify ONLY when conversationFinished transitions false→true
-            if (data.conversationFinished && !_wasConversationFinished) {
+            // Notify ONLY when server transitions from streaming to complete
+            if (!data.isStreaming && _wasStreaming) {
                 showCompletionToast();
                 if (_isTtsEnabled && data.messages) {
                     const finalMsgs = data.messages.filter(m => m.role !== 'user' && m.type !== 'taskBlock');
@@ -170,6 +171,7 @@ async function pollChatState() {
                     }
                 }
             }
+            _wasStreaming = !!data.isStreaming;
             _wasConversationFinished = !!data.conversationFinished;
         }
     } catch (e) {

@@ -31,7 +31,7 @@ L'application agit comme un proxy intelligent :
 - **Messages utilisateur** : Stockés en `localStorage` côté client quand envoyés, car la virtualisation du DOM de l'Agent Manager empêche leur extraction fiable.
 - **Tunneling (Cloudflare)** : Expose l'interface mobile via un tunnel sécurisé avec mot de passe.
 - **Frontend (ES Modules)** : Interface découpée en modules indépendants (`public/js/`) — seuls les 2 derniers messages (user + agent) sont affichés.
-- **Fix New Chat** : Support complet de la page "Nouvelle Conversation" (DOM vide) et envoi de message.
+- **Fix New Chat** : Support complet de la page "Nouvelle Conversation" (DOM vide), fermeture auto des modales (historique/projets) et envoi de message.
 - **Extraction Intelli** : Capture des blocs tâches, réflexions et messages directes de l'agent.
 - **Artefacts & Commentaires** : Visualisation des artefacts Antigravity avec rendu markdown fidèle. Ajout de **commentaires contextuels rapides** : sélection de texte → highlight jaune visible (bordure + icône 💬) + badge compteur. Cliquer/taper un highlight ouvre un popover pour éditer/supprimer. **Support mobile complet** : sélection tactile détectée via `touchend` + `selectionchange`, popover positionné en `fixed` avec gestion above/below. Les commentaires sont injectés en XML au prochain envoi de message.
 - **Injection Message Fiable** : Envoi de messages via CDP avec 3 stratégies d'insertion (single `execCommand`, paste simulation, DOM direct) évitant les troncatures de messages longs.

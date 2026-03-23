@@ -1288,6 +1288,24 @@ textarea::-webkit-scrollbar {
     white-space: nowrap;
 }
 
+.history-card-project-badge {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--accent);
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
 .history-card.active {
     border-color: rgba(59, 130, 246, 0.4);
     background: linear-gradient(to right, rgba(59, 130, 246, 0.05), var(--bg-panel));

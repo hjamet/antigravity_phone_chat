@@ -89,6 +89,7 @@ function playNextTTSChunk() {
     if (!audioEl) return;
     
     audioEl.src = url;
+    audioEl.playbackRate = 1.35; // Accelerate TTS playback
     audioEl.onended = () => {
         playNextTTSChunk();
     };
@@ -563,9 +564,9 @@ async function init() {
     if (elements.sslBanner) elements.sslBanner.style.display = 'none';
 
     window.openNewWorkspace = async () => {
+        window.hideProjects();
         try {
             await fetchWithAuth('/api/workspace/open', { method: 'POST' });
-            window.hideProjects();
         } catch (e) {}
     };
 

@@ -217,13 +217,13 @@ export function setupRoutes(app, {
                 .replace(/\]\]/g, '')
                 .replace(/\[\[/g, '');
 
-            const urls = googleTTS.getAllAudioUrls(cleanText || "Terminé.", {
+            const results = await googleTTS.getAllAudioBase64(cleanText || "Terminé.", {
                 lang: 'fr',
                 slow: false,
                 host: 'https://translate.google.com',
                 splitPunct: ',.?!'
             });
-            res.json({ urls: urls.map(u => u.url) });
+            res.json({ urls: results.map(r => `data:audio/mp3;base64,${r.base64}`) });
         } catch (e) {
             console.error('TTS Audio Generation Error:', e);
             res.status(500).json({ error: e.message });

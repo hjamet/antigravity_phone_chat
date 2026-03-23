@@ -22,7 +22,33 @@ export async function loadHistory() {
 }
 
 /**
- * Render history list into the DOM
+ * Parse relative time string (e.g. "now", "5m", "2h", "1d", "3w") to minutes for sorting.
+ * Lower value = more recent.
+ */
+function parseTimeToMinutes(timeStr) {
+    if (!timeStr || timeStr === 'Recent' || timeStr === 'now') return 0;
+    const match = timeStr.match(/^(\d+)([mhdw])$/);
+    if (!match) return 9999;
+    const val = parseInt(match[1], 10);
+    const unit = match[2];
+    if (unit === 'm') return val;
+    if (unit === 'h') return val * 60;
+    if (unit === 'd') return val * 1440;
+    if (unit === 'w') return val * 10080;
+    return 9999;
+}
+
+/**
+ * Extract short project name from workspace path (last folder segment)
+ */
+function shortProjectName(workspace) {
+    if (!workspace || workspace === 'Other') return 'Other';
+    const parts = workspace.replace(/\\/g, '/').split('/');
+    return parts[parts.length - 1] || workspace;
+}
+
+/**
+ * Render history list into the DOM — sorted by recency, with project badge
  */
 function renderHistory(chats) {
     const container = elements.historyList;
@@ -54,52 +80,53 @@ function renderHistory(chats) {
     `;
     container.appendChild(actionContainer);
 
-    // Group by workspace
-    const groups = {};
-    chats.forEach(chat => {
-        const ws = chat.workspace || 'Other';
-        if (!groups[ws]) groups[ws] = [];
-        groups[ws].push(chat);
+    // Sort all chats by recency (most recent first)
+    const sorted = [...chats].sort((a, b) => {
+        // Active chats always on top
+        if (a.isActive && !b.isActive) return -1;
+        if (!a.isActive && b.isActive) return 1;
+        return parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time);
     });
 
-    Object.keys(groups).forEach(wsName => {
-        const groupEl = document.createElement('div');
-        groupEl.className = 'history-list-group';
-        groupEl.innerHTML = `<div class="history-workspace-header">${wsName}</div>`;
+    // Flat list container
+    const listEl = document.createElement('div');
+    listEl.className = 'history-list-group';
+
+    sorted.forEach(chat => {
+        const item = document.createElement('div');
+        item.className = `history-card ${chat.isActive ? 'active' : ''}`;
         
-        groups[wsName].forEach(chat => {
-            const item = document.createElement('div');
-            item.className = `history-card ${chat.isActive ? 'active' : ''}`;
+        let iconCode;
+        if (chat.isActive) {
+            iconCode = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" class="spin-anim" style="color: var(--accent);"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path></svg>`;
+        } else if (chat.isFinished) {
+            iconCode = `<div class="history-card-finished-dot"></div>`;
+        } else {
+            iconCode = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" style="opacity: 0.7;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`;
+        }
+
+        const projectLabel = shortProjectName(chat.workspace);
             
-            let iconCode;
-            if (chat.isActive) {
-                iconCode = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" class="spin-anim" style="color: var(--accent);"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path></svg>`;
-            } else if (chat.isFinished) {
-                iconCode = `<div class="history-card-finished-dot"></div>`;
-            } else {
-                iconCode = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" style="opacity: 0.7;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`;
-            }
-                
-            item.innerHTML = `
-                <div class="history-card-icon">
-                    ${iconCode}
-                </div>
-                <div class="history-card-content">
-                    <span class="history-card-title">${chat.title}</span>
-                    <span class="history-card-time">${chat.time || 'Recent'}</span>
-                </div>
-                <div class="history-card-arrow">
-                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2">
-                        <polyline points="9 18 15 12 9 6"></polyline>
-                    </svg>
-                </div>
-            `;
-            item.onclick = () => window.selectChat ? window.selectChat(chat.title) : selectChat(chat.title);
-            groupEl.appendChild(item);
-        });
-        
-        container.appendChild(groupEl);
+        item.innerHTML = `
+            <div class="history-card-icon">
+                ${iconCode}
+            </div>
+            <div class="history-card-content">
+                <span class="history-card-title">${chat.title}</span>
+                <span class="history-card-time">${chat.time || 'Recent'}</span>
+            </div>
+            <div class="history-card-project-badge" title="${chat.workspace || 'Other'}">${projectLabel}</div>
+            <div class="history-card-arrow">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </div>
+        `;
+        item.onclick = () => window.selectChat ? window.selectChat(chat.title) : selectChat(chat.title);
+        listEl.appendChild(item);
     });
+    
+    container.appendChild(listEl);
 }
 
 /**
@@ -122,6 +149,7 @@ export async function selectChat(title) {
  * Start a new chat
  */
 export async function startNewChat() {
+    toggleLayer(elements.historyLayer, false);
     try {
         const res = await fetchWithAuth('/new-chat', { method: 'POST' });
         const data = await res.json();

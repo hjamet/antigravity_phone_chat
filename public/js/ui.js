@@ -66,7 +66,6 @@ export function renderChatState(state) {
     // Check if user is near the bottom using the actual scrollable container
     const scrollEl = elements.chatContainer;
     const isNearBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 150;
-    const isFirstLoad = existing.length === 0 && messages.length > 0;
     
     // Remove initial loading state on first render
     const loadingEls = container.querySelectorAll('.loading-state');
@@ -74,6 +73,7 @@ export function renderChatState(state) {
     
     // Get existing message divs (exclude streaming indicator)
     const existing = Array.from(container.querySelectorAll('.chat-msg'));
+    const isFirstLoad = existing.length === 0 && messages.length > 0;
     
     let anyChanged = false;
     

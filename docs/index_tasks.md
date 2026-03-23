@@ -32,3 +32,5 @@
 | [Lecture Auto TTS](tasks/tts-auto-read.md) | Lecture vocale automatique de la réponse finale | 2026-03-23 | `Up to date` |
 | [Fix State Switch Conversation](tasks/fix-chat-switch-state.md) | Correction du chargement d'état (isStreaming, artefacts) lors d'un switch de conversation | 2026-03-23 | `Up to date` |
 | [Fix Server Crash on Picker Selection](tasks/fix-server-crash-picker.md) | Résolution de l'erreur ReferenceError `EXP is not defined` | 2026-03-23 | `Up to date` |
+| [MeowTalker 3000](tasks/meowtalker_spec.md) | Système de traduction de miaulements (Test) | 2026-03-23 | `Up to date` |
+| [Fix Autoplay Mobile TTS](tasks/mobile-tts-autoplay-fix.md) | Bouton Play/Stop inline pour résoudre NotAllowedError | 2026-03-23 | `Up to date` |

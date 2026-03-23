@@ -618,6 +618,65 @@ pre:hover .code-copy-btn {
     font-weight: 600;
 }
 
+/* --- Text-to-Speech Inline Button --- */
+.msg-actions {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 10px;
+    padding-left: 4px;
+}
+
+.inline-tts-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+    border-radius: 12px;
+    padding: 6px 12px;
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    font-family: 'Inter', inherit;
+}
+
+.inline-tts-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.inline-tts-btn:active {
+    transform: scale(0.96);
+}
+
+.inline-tts-btn svg {
+    width: 14px;
+    height: 14px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    transition: transform 0.2s;
+}
+
+.inline-tts-btn.playing {
+    background: rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.3);
+    color: #a78bfa;
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+}
+
+.inline-tts-btn.playing svg {
+    animation: pulseTTS 1.5s infinite alternate;
+}
+
+@keyframes pulseTTS {
+    from { transform: scale(1); opacity: 0.8; }
+    to { transform: scale(1.1); opacity: 1; }
+}
+
 /* Streaming indicator */
 .streaming-indicator {
     display: flex;
@@ -2490,6 +2549,76 @@ textarea::-webkit-scrollbar {
         box-shadow: 0 0 12px rgba(34, 197, 94, 0.8);
         transform: scale(1.2);
     }
+}
+
+/* ===== History Card — Unread Dot (orange pulse) ===== */
+.history-card-unread-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #f97316; /* Orange-500 */
+    box-shadow: 0 0 8px rgba(249, 115, 22, 0.7);
+    animation: unread-pulse 1.5s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
+@keyframes unread-pulse {
+    0%, 100% {
+        box-shadow: 0 0 6px rgba(249, 115, 22, 0.5);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 16px rgba(249, 115, 22, 1);
+        transform: scale(1.25);
+    }
+}
+/* ===== Unread Badge (on History Button) ===== */
+.unread-badge {
+    position: absolute;
+    top: -4px;
+    right: -6px;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    background: #f97316;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    box-shadow: 0 0 8px rgba(249, 115, 22, 0.6);
+    animation: unread-pulse 1.5s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* ===== Unread Toast (clickable notification) ===== */
+.unread-toast {
+    position: fixed;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: linear-gradient(135deg, rgba(249, 115, 22, 0.95), rgba(234, 88, 12, 0.95));
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 14px;
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+    box-shadow: 0 8px 28px rgba(249, 115, 22, 0.5);
+    z-index: 9999;
+    opacity: 0;
+    pointer-events: auto;
+    cursor: pointer;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    max-width: 90vw;
+    text-align: center;
+}
+
+.unread-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
 }
 
 /* History Card — Active spinner (continuous) */

@@ -4,9 +4,9 @@
  */
 
 import { initWS } from './ws.js?v=11';
-import { elements, renderChatState, renderSnapshot, updateStateUI, toggleLayer } from './ui.js?v=15';
+import { elements, renderChatState, renderSnapshot, updateStateUI, toggleLayer, getMessageHash } from './ui.js?v=16';
 import { sendMessage, stopGeneration, scrollToBottom } from './chat.js?v=10';
-import { loadHistory, startNewChat } from './history.js?v=12';
+import { loadHistory, startNewChat } from './history.js?v=14';
 import { loadProjects } from './projects.js?v=10';
 import { fetchWithAuth } from './api.js?v=10';
 import { initPicker, onTriggerChar, hidePicker, isPickerVisible, getWorkflowPrefix, clearWorkflow } from './picker.js?v=13';
@@ -32,11 +32,166 @@ window._replayLastTTS = () => {
 let _ttsQueue = [];
 let _ttsIsPlaying = false;
 let _ttsDebugToast = null;
+let _activeTtsHash = null;
+
+function stopTTS() {
+    const audioEl = document.getElementById('ttsAudio');
+    if (audioEl) {
+        audioEl.pause();
+        audioEl.currentTime = 0;
+    }
+    _ttsQueue = [];
+    _ttsIsPlaying = false;
+    _activeTtsHash = null;
+    
+    if (_ttsDebugToast && _ttsDebugToast.parentNode) _ttsDebugToast.remove();
+    _ttsDebugToast = null;
+    
+    // Reset all buttons status visually
+    document.querySelectorAll('.inline-tts-btn').forEach(btn => {
+        btn.classList.remove('playing');
+        const playIcon = btn.querySelector('.icon-play');
+        const stopIcon = btn.querySelector('.icon-stop');
+        const label = btn.querySelector('.tts-label');
+        if (playIcon) playIcon.style.display = 'block';
+        if (stopIcon) stopIcon.style.display = 'none';
+        if (label) label.textContent = 'Écouter';
+    });
+}
+
+window.toggleMsgTTS = function(btn) {
+    const hash = btn.getAttribute('data-tts-hash');
+    const encodedText = btn.getAttribute('data-tts-content');
+    
+    if (!encodedText) return;
+    const text = decodeURIComponent(encodedText);
+    
+    if (_ttsIsPlaying && _activeTtsHash === hash) {
+        // Stop current
+        stopTTS();
+    } else {
+        // Stop previous if any, then play new
+        stopTTS();
+        _activeTtsHash = hash;
+        playTTS(text, hash);
+    }
+};
+
+/**
+ * ===== Unread Conversation Tracking =====
+ * Background polls /chat-history every 15s.
+ * Compares isFinished states to detect NEW completions.
+ * Shows a badge on the history button + a clickable toast.
+ */
+let _knownFinished = new Set();  // titles of chats we already knew were finished
+let _unreadFinished = new Set(); // titles of chats that finished but user hasn't opened
+let _unreadInitialized = false;  // first poll is just a baseline, don't alert
+
+function getUnreadSet() {
+    try {
+        const arr = JSON.parse(localStorage.getItem('antigravity_unread_finished')) || [];
+        return new Set(arr);
+    } catch(e) { return new Set(); }
+}
+
+function saveUnreadSet(s) {
+    try { localStorage.setItem('antigravity_unread_finished', JSON.stringify([...s])); } catch(e) {}
+}
+
+function updateHistoryBadge() {
+    const btn = document.getElementById('historyBtn');
+    if (!btn) return;
+    let badge = btn.querySelector('.unread-badge');
+    if (_unreadFinished.size > 0) {
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'unread-badge';
+            btn.style.position = 'relative';
+            btn.appendChild(badge);
+        }
+        badge.textContent = _unreadFinished.size;
+        badge.style.display = 'flex';
+    } else if (badge) {
+        badge.style.display = 'none';
+    }
+}
+
+function showUnreadToast(title) {
+    // Remove any existing unread toast
+    document.querySelectorAll('.unread-toast').forEach(el => el.remove());
+    const toast = document.createElement('div');
+    toast.className = 'unread-toast';
+    toast.innerHTML = `<span>🟠 <strong>${title.substring(0, 50)}</strong> terminée</span>`;
+    toast.style.cursor = 'pointer';
+    toast.addEventListener('click', () => {
+        toast.remove();
+        window.selectChat?.(title);
+    });
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('show'));
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.classList.remove('show');
+            toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+        }
+    }, 8000);
+}
+
+async function pollUnreadConversations() {
+    try {
+        const res = await fetchWithAuth('/chat-history');
+        const data = await res.json();
+        if (!data.success || !data.chats) return;
+
+        const currentFinished = new Set();
+        data.chats.forEach(c => {
+            if (c.isFinished) currentFinished.add(c.title);
+        });
+
+        if (!_unreadInitialized) {
+            // First run: seed the baseline, restore unread from localStorage
+            _knownFinished = currentFinished;
+            _unreadFinished = getUnreadSet();
+            // Clean up: remove from unread any chats that are no longer finished (re-opened)
+            for (const t of _unreadFinished) {
+                if (!currentFinished.has(t)) _unreadFinished.delete(t);
+            }
+            saveUnreadSet(_unreadFinished);
+            _unreadInitialized = true;
+            updateHistoryBadge();
+            return;
+        }
+
+        // Detect newly finished chats
+        for (const title of currentFinished) {
+            if (!_knownFinished.has(title)) {
+                // This chat just finished!
+                _unreadFinished.add(title);
+                showUnreadToast(title);
+            }
+        }
+
+        _knownFinished = currentFinished;
+        saveUnreadSet(_unreadFinished);
+        updateHistoryBadge();
+    } catch(e) { /* silent */ }
+}
+
+/** Mark a chat as read (remove from unread set) */
+function markChatRead(title) {
+    _unreadFinished.delete(title);
+    saveUnreadSet(_unreadFinished);
+    updateHistoryBadge();
+}
+
+// Expose for history.js
+window._markChatRead = markChatRead;
+window._getUnreadFinished = () => _unreadFinished;
 
 /**
  * Read text using Server-Side TTS API
  */
-async function playTTS(text) {
+async function playTTS(text, hash = null) {
     _lastFinalMessageText = text;
     
     const audioEl = document.getElementById('ttsAudio');
@@ -46,12 +201,27 @@ async function playTTS(text) {
     }
     _ttsQueue = [];
     _ttsIsPlaying = false;
+    _activeTtsHash = hash;
 
     if (_ttsDebugToast && _ttsDebugToast.parentNode) _ttsDebugToast.remove();
     _ttsDebugToast = document.createElement('div');
     _ttsDebugToast.textContent = '🔊 Lecture TTS en cours...';
     _ttsDebugToast.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:8px 16px;border-radius:20px;z-index:9999;font-size:12px;pointer-events:none;';
     document.body.appendChild(_ttsDebugToast);
+    
+    // Update button UI if hash provided
+    if (hash) {
+        const btn = document.getElementById(`tts-btn-${hash}`);
+        if (btn) {
+            btn.classList.add('playing');
+            const playIcon = btn.querySelector('.icon-play');
+            const stopIcon = btn.querySelector('.icon-stop');
+            const label = btn.querySelector('.tts-label');
+            if (playIcon) playIcon.style.display = 'none';
+            if (stopIcon) stopIcon.style.display = 'block';
+            if (label) label.textContent = 'Stop';
+        }
+    }
 
     try {
         const res = await fetchWithAuth('/api/tts', {
@@ -65,7 +235,7 @@ async function playTTS(text) {
             _ttsQueue = data.urls;
             playNextTTSChunk();
         } else {
-            if (_ttsDebugToast && _ttsDebugToast.parentNode) _ttsDebugToast.remove();
+            stopTTS();
         }
     } catch (e) {
         console.error('TTS Fetch Error', e);
@@ -73,13 +243,13 @@ async function playTTS(text) {
             _ttsDebugToast.textContent = "🔊 TTS Error: " + e.message;
             setTimeout(() => { if (_ttsDebugToast && _ttsDebugToast.parentNode) _ttsDebugToast.remove(); }, 3000);
         }
+        stopTTS();
     }
 }
 
 function playNextTTSChunk() {
     if (_ttsQueue.length === 0) {
-        _ttsIsPlaying = false;
-        if (_ttsDebugToast && _ttsDebugToast.parentNode) _ttsDebugToast.remove();
+        stopTTS();
         return;
     }
     
@@ -100,9 +270,7 @@ function playNextTTSChunk() {
     
     audioEl.play().catch(e => {
         console.error('Autoplay prevented:', e);
-        _ttsIsPlaying = false;
-        _ttsQueue = [];
-        if (_ttsDebugToast && _ttsDebugToast.parentNode) _ttsDebugToast.remove();
+        stopTTS();
     });
 }
 
@@ -189,8 +357,9 @@ async function pollChatState() {
                         const finalMsgs = data.messages.filter(m => m.role !== 'user' && m.type !== 'taskBlock');
                         if (finalMsgs.length > 0) {
                             const last = finalMsgs[finalMsgs.length - 1];
+                            const hash = last.type ? getMessageHash(last) : null;
                             if (last.content) {
-                                playTTS(last.content);
+                                playTTS(last.content, hash);
                             } else {
                                 playTTS("L'agent a terminé de générer une réponse.");
                             }
@@ -201,6 +370,19 @@ async function pollChatState() {
                             }
                         }
                     }
+                    
+                    // The current chat just finished streaming in front of the user, mark it as read
+                    fetchWithAuth('/app-state').then(r=>r.json()).then(state => {
+                        if (state && state.chatTitle) {
+                            try {
+                                let readChats = JSON.parse(localStorage.getItem('antigravity_read_chats')) || [];
+                                if (!readChats.includes(state.chatTitle)) {
+                                    readChats.push(state.chatTitle);
+                                    localStorage.setItem('antigravity_read_chats', JSON.stringify(readChats));
+                                }
+                            } catch(e) {}
+                        }
+                    }).catch(()=>{});
                 }
             }
             _wasStreaming = !!data.isStreaming;
@@ -309,8 +491,8 @@ async function init() {
             sendMessage(prefix + finalText);
         }
         
-        // Release guard after a short delay (2 seconds instead of 1) to block duplicate trigger more forcefully
-        setTimeout(() => { _sendGuard = false; }, 2000);
+        // Release guard after a short delay (4 seconds instead of 2) to block duplicate trigger more forcefully
+        setTimeout(() => { _sendGuard = false; }, 4000);
     }
     
     // Expose for artifacts module
@@ -543,14 +725,7 @@ async function init() {
         localStorage.setItem('antigravity_tts', _isTtsEnabled);
         updateTtsUI();
         if (!_isTtsEnabled) {
-            const audioEl = document.getElementById('ttsAudio');
-            if (audioEl) {
-                audioEl.pause();
-                audioEl.currentTime = 0;
-            }
-            _ttsQueue = [];
-            _ttsIsPlaying = false;
-            if (_ttsDebugToast && _ttsDebugToast.parentNode) _ttsDebugToast.remove();
+            stopTTS();
         }
     });
 
@@ -561,6 +736,7 @@ async function init() {
     window.startNewChat = startNewChat;
     window.selectChat = async (title) => {
         window.hideChatHistory();
+        markChatRead(title);
         const { selectChat } = await import('./history.js');
         await selectChat(title);
         _lastPollJson = '';
@@ -587,6 +763,10 @@ async function init() {
 
     // Initialize artifacts
     initArtifacts();
+
+    // Start unread conversation background poll (every 15s)
+    pollUnreadConversations();
+    setInterval(pollUnreadConversations, 15000);
 }
 
 /**

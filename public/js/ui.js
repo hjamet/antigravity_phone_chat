@@ -88,7 +88,7 @@ export function renderChatState(state) {
             if (el.getAttribute('data-hash') !== msgHash) {
                 anyChanged = true;
                 // Patch inner content directly — never touch className or outer element
-                el.innerHTML = buildMessageInner(msg);
+                el.innerHTML = buildMessageInner(msg, msgHash);
                 el.setAttribute('data-hash', msgHash);
             }
         } else {
@@ -96,7 +96,7 @@ export function renderChatState(state) {
             anyChanged = true;
             const div = document.createElement('div');
             div.className = getCssClass(msg) + ' chat-msg-enter';
-            div.innerHTML = buildMessageInner(msg);
+            div.innerHTML = buildMessageInner(msg, msgHash);
             div.setAttribute('data-hash', msgHash);
             container.appendChild(div);
             div.addEventListener('animationend', () => div.classList.remove('chat-msg-enter'), { once: true });
@@ -185,7 +185,7 @@ function getCssClass(msg) {
  * This hash is the SOLE gate for DOM updates — it must include everything
  * that affects the visual rendering of the message.
  */
-function getMessageHash(msg) {
+export function getMessageHash(msg) {
     const s = [
         msg.type || '',
         msg.role || '',
@@ -221,7 +221,7 @@ function buildArtifactRefsHtml(refs) {
 /**
  * Build the INNER HTML of a message div.
  */
-function buildMessageInner(msg) {
+function buildMessageInner(msg, msgHash = null) {
     const renderContent = (m) => {
         if (m.html) {
             return m.html
@@ -269,7 +269,15 @@ function buildMessageInner(msg) {
         
         return html;
     } else {
-        return `<div class="msg-label">Agent</div><div class="msg-body">${renderContent(msg)}</div>${refsHtml}`;
+        let ttsBtnHtml = '';
+        if (msgHash) {
+            ttsBtnHtml = `<div class="msg-actions"><button class="inline-tts-btn" id="tts-btn-${msgHash}" data-tts-hash="${msgHash}" data-tts-content="${encodeURIComponent(msg.content)}" onclick="window.toggleMsgTTS(this)">
+                <svg class="icon-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <svg class="icon-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><rect x="6" y="6" width="12" height="12"></rect></svg>
+                <span class="tts-label">Écouter</span>
+            </button></div>`;
+        }
+        return `<div class="msg-label">Agent</div><div class="msg-body">${renderContent(msg)}</div>${refsHtml}${ttsBtnHtml}`;
     }
 }
 

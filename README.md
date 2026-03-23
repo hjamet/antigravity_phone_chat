@@ -53,6 +53,7 @@ L'application agit comme un proxy intelligent :
 | PWA Installable | ✅ Nouveau | manifest.json + sw.js |
 | Lecture Auto TTS | ✅ Nouveau | Web Speech API |
 | Screenshot Agent Manager | ✅ Nouveau | CDP Page.captureScreenshot |
+| Indicateur Non Lu (Historique) | ✅ Nouveau | LocalStorage Frontend |
 
 ## 6. # Documentation Index
 | Titre (Lien) | Description |
@@ -140,6 +141,10 @@ L'application agit comme un proxy intelligent :
 | 40 | **Fix Server Crash on Picker Selection** | ✅ Fait | [fix-server-crash-picker.md](docs/tasks/fix-server-crash-picker.md) |
 | 41 | **Screenshot Agent Manager** | ✅ Fait | — |
 | 42 | **Fix Retours à la Ligne Chat & Copie** | ✅ Fait | — |
+| 43 | **Indicateur Conversations Non Lues** | ✅ Fait | — |
+| 44 | **MeowTalker 3000** | 🧪 Test | [meowtalker_spec.md](docs/tasks/meowtalker_spec.md) |
+| 45 | **Fix Autoplay Mobile TTS** | ✅ Fait | [mobile-tts-autoplay-fix.md](docs/tasks/mobile-tts-autoplay-fix.md) |
+| 46 | **Fix Double Envoi Messages** | ✅ Fait | — |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

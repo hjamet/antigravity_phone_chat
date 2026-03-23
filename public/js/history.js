@@ -92,6 +92,9 @@ function renderHistory(chats) {
     const listEl = document.createElement('div');
     listEl.className = 'history-list-group';
 
+    // Get unread set from main.js (populated by background poll)
+    const unreadSet = window._getUnreadFinished ? window._getUnreadFinished() : new Set();
+
     sorted.forEach(chat => {
         const item = document.createElement('div');
         item.className = `history-card ${chat.isActive ? 'active' : ''}`;
@@ -99,6 +102,8 @@ function renderHistory(chats) {
         let iconCode;
         if (chat.isActive) {
             iconCode = `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" class="spin-anim" style="color: var(--accent);"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path></svg>`;
+        } else if (chat.isFinished && unreadSet.has(chat.title)) {
+            iconCode = `<div class="history-card-unread-dot" title="Non lu"></div>`;
         } else if (chat.isFinished) {
             iconCode = `<div class="history-card-finished-dot"></div>`;
         } else {
@@ -133,6 +138,7 @@ function renderHistory(chats) {
  * Select a chat from history
  */
 export async function selectChat(title) {
+    // Mark as read is handled by main.js (window.selectChat -> markChatRead)
     toggleLayer(elements.historyLayer, false);
     try {
         const res = await fetchWithAuth('/select-chat', {

@@ -128,9 +128,9 @@ export function setupRoutes(app, {
         const { message } = req.body;
         if (!message) return res.status(400).json({ error: 'Message required' });
         
-        // Anti-spam debounce (3 seconds) to prevent double sending
+        // Anti-spam debounce (15 seconds) to prevent double sending
         const trimmedMsg = message.trim();
-        if (trimmedMsg === lastSentMessage && Date.now() - lastSentTime < 3000) {
+        if (trimmedMsg === lastSentMessage && Date.now() - lastSentTime < 15000) {
             console.log(`[Debounce] Ignored duplicate message: "${trimmedMsg.substring(0, 30)}..."`);
             return res.json({ success: true, method: 'debounced', details: {} });
         }

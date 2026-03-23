@@ -407,7 +407,7 @@ export async function injectMessage(cdp, text) {
             document.execCommand("insertText", false, textToInsert);
 
             // Wait for React editor to process
-            await new Promise(r => setTimeout(r, 300));
+            await new Promise(r => setTimeout(r, 450));
 
             const submitBtn = document.querySelector(SEL.controls.submitButton);
             if (submitBtn) {

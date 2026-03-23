@@ -63,6 +63,11 @@ export async function selectProject(project) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(project)
         });
+        
+        // Emulate the "New Chat" button behavior locally
+        // The backend /api/projects/open already triggers a new agent session,
+        // so we just need to clear the local UI.
+        window.dispatchEvent(new CustomEvent('new-chat-started'));
     } catch (e) {
         console.error('Select project error:', e);
     }

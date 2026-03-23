@@ -4,7 +4,7 @@
  */
 
 import { initWS } from './ws.js?v=11';
-import { elements, renderChatState, renderSnapshot, updateStateUI, toggleLayer } from './ui.js?v=11';
+import { elements, renderChatState, renderSnapshot, updateStateUI, toggleLayer } from './ui.js?v=12';
 import { sendMessage, stopGeneration, scrollToBottom } from './chat.js?v=10';
 import { loadHistory, startNewChat } from './history.js?v=12';
 import { loadProjects } from './projects.js?v=10';

@@ -62,8 +62,10 @@ export function renderChatState(state) {
         }
     }
     
-    // Check if user is near the bottom before update
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    // Check if user is near the bottom using the actual scrollable container
+    const scrollEl = elements.chatContainer;
+    const isNearBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 150;
+    const isFirstLoad = existing.length === 0 && messages.length > 0;
     
     // Remove initial loading state on first render
     const loadingEls = container.querySelectorAll('.loading-state');
@@ -115,10 +117,13 @@ export function renderChatState(state) {
     // Artifact quick-access bar
     updateArtifactBar(state.availableArtifacts || []);
 
-    // Only auto-scroll if something changed AND user was near the bottom
-    if (anyChanged && isNearBottom) {
+    // Only auto-scroll if something changed AND user was near the bottom (or first load)
+    if (anyChanged && (isNearBottom || isFirstLoad)) {
         requestAnimationFrame(() => {
-            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+            scrollEl.scrollTo({ 
+                top: scrollEl.scrollHeight, 
+                behavior: isFirstLoad ? 'auto' : 'smooth' 
+            });
         });
     }
     

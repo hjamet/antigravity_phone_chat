@@ -7,7 +7,8 @@ export class ChatHistoryService {
         this.isStreaming = false;
         this.conversationFinished = false;
         this.scrollInfo = null;
-        this.ignoreUntil = 0;
+        this.lastRawVisibleMessages = '';
+        this.staleLockExpiry = 0;
         this.availableArtifacts = [];
     }
 
@@ -16,25 +17,17 @@ export class ChatHistoryService {
      * Called when the user starts a new chat or switches projects.
      */
     reset() {
-        // Save the signature of the current conversation to detect stale DOM
-        // during the native UI transition.
-        if (this.chatTimeline.length > 0) {
-            const first = this.chatTimeline[0]?.content || '';
-            const last = this.chatTimeline[this.chatTimeline.length - 1]?.content || '';
-            this.staleSignature = this.hashString(first + last);
-            this.staleLockExpiry = Date.now() + 5000; // max lock 5s
-        } else {
-            this.staleSignature = null;
-        }
+        // Mark the current visible state as "stale" to ignore it during UI transition
+        this.staleRawMessagesStr = this.lastRawVisibleMessages;
+        this.staleLockExpiry = Date.now() + 5000; // max lock 5s
 
         this.chatTimeline = [];
         this.lastSnapshotHash = null;
         this.isStreaming = false;
         this.conversationFinished = false;
         this.scrollInfo = null;
-        this.ignoreUntil = 0; // Legacy
         this.availableArtifacts = [];
-        console.log(`🔄 ChatHistoryService reset — waiting for UI transition`);
+        console.log(`🔄 ChatHistoryService reset — ignoring stale DOM for up to 5s`);
     }
 
     /**
@@ -61,30 +54,28 @@ export class ChatHistoryService {
             return { hasChanged: false, error: snapshot?.error || 'Invalid snapshot' };
         }
 
+        const currentRaw = JSON.stringify(snapshot.messages || []);
+        
         // --- STALE DOM DETECTION ---
         // During a chat transition, the scraper might capture the old, disappearing UI.
-        // We reject incoming snapshots whose signature matches the one we just discarded,
+        // We reject incoming snapshots whose content exactly matches what we had BEFORE the reset,
         // until a strictly different snapshot arrives (or a 5s max timeout is reached).
-        if (this.staleSignature) {
+        if (this.staleRawMessagesStr) {
             if (Date.now() > this.staleLockExpiry) {
                 console.log('⚠️ Stale UI lock expired (5s). Forcing accept of current DOM.');
-                this.staleSignature = null;
+                this.staleRawMessagesStr = null;
             } else {
-                const msgs = snapshot.messages || [];
-                if (msgs.length > 0) {
-                    const first = msgs[0]?.content || '';
-                    const last = msgs[msgs.length - 1]?.content || '';
-                    const currentSig = this.hashString(first + last);
-                    
-                    if (currentSig === this.staleSignature) {
-                        return { hasChanged: false, ignored: true };
-                    }
+                if (currentRaw === this.staleRawMessagesStr) {
+                    // Still seeing the exact same messages as before the reset. Ignore.
+                    return { hasChanged: false, ignored: true };
                 }
-                // Signature changed (or empty chat). The transition is complete!
-                this.staleSignature = null;
+                // Content changed (or empty chat). The transition is complete!
+                this.staleRawMessagesStr = null;
                 console.log('✅ UI Transition complete. Resuming snapshot processing.');
             }
         }
+
+        this.lastRawVisibleMessages = currentRaw;
 
 
         const validation = snapshotSchema.safeParse(snapshot);

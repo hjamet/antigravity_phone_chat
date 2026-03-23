@@ -182,18 +182,24 @@ async function pollChatState() {
             }
             // Notify ONLY when server transitions from streaming to complete
             if (!data.isStreaming && _wasStreaming) {
-                showCompletionToast();
-                if (_isTtsEnabled && data.messages) {
-                    const finalMsgs = data.messages.filter(m => m.role !== 'user' && m.type !== 'taskBlock');
-                    if (finalMsgs.length > 0) {
-                        const last = finalMsgs[finalMsgs.length - 1];
-                        if (last.content) {
-                            playTTS(last.content);
+                // Ensure there are actually messages before notifying (fixes new chat bug)
+                if (data.messages && data.messages.length > 0) {
+                    showCompletionToast();
+                    if (_isTtsEnabled) {
+                        const finalMsgs = data.messages.filter(m => m.role !== 'user' && m.type !== 'taskBlock');
+                        if (finalMsgs.length > 0) {
+                            const last = finalMsgs[finalMsgs.length - 1];
+                            if (last.content) {
+                                playTTS(last.content);
+                            } else {
+                                playTTS("L'agent a terminé de générer une réponse.");
+                            }
                         } else {
-                            playTTS("L'agent a terminé de générer une réponse.");
+                            const hasAgent = data.messages.some(m => m.role !== 'user');
+                            if (hasAgent) {
+                                playTTS("L'agent a terminé de générer une réponse.");
+                            }
                         }
-                    } else {
-                        playTTS("L'agent a terminé de générer une réponse.");
                     }
                 }
             }
@@ -367,6 +373,7 @@ async function init() {
         // Reset polling cache so the next poll triggers a full re-render
         _lastPollJson = '';
         _wasConversationFinished = false;
+        _wasStreaming = false; // Fix TTS bug
         // Clear any pending user message
         window.pendingUserMessage = undefined;
     });
@@ -558,6 +565,7 @@ async function init() {
         await selectChat(title);
         _lastPollJson = '';
         _wasConversationFinished = false;
+        _wasStreaming = false; // Fix TTS bug
         setTimeout(pollChatState, 1500);
     };
 

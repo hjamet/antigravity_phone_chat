@@ -107,15 +107,7 @@ function showCompletionToast() {
     toast.id = 'completionToast';
     toast.className = 'completion-toast';
     
-    toast.innerHTML = `
-        <div style="display:flex; align-items:center; gap:8px;">
-            <span>✅ Réponse reçue</span>
-            <button onclick="event.stopPropagation(); window._replayLastTTS()" 
-                    style="background:rgba(255,255,255,0.2); border:none; border-radius:12px; padding:4px 10px; color:white; font-size:12px; cursor:pointer; font-weight:600;">
-                ▶️ Lire
-            </button>
-        </div>
-    `;
+    toast.textContent = '✅ Réponse reçue';
     
     toast.style.cursor = 'pointer';
     toast.style.pointerEvents = 'auto';

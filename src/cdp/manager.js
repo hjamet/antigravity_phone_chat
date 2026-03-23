@@ -1092,7 +1092,7 @@ export async function triggerPicker(cdp, char) {
         return items || { ok: true, type: 'empty', items: [] };
     })()`;
 
-    return await runCdpScript(cdp, EXP, 'triggerPicker');
+    return await runCdpScript(cdp, EXPRESSION, 'triggerPicker');
 }
 
 /**

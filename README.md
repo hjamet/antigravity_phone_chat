@@ -139,6 +139,7 @@ L'application agit comme un proxy intelligent :
 | 39 | **Fix Workflow Picker Overlays** | ✅ Fait | [fix-workflow-picker-overlays.md](docs/tasks/fix-workflow-picker-overlays.md) |
 | 40 | **Fix Server Crash on Picker Selection** | ✅ Fait | [fix-server-crash-picker.md](docs/tasks/fix-server-crash-picker.md) |
 | 41 | **Screenshot Agent Manager** | ✅ Fait | — |
+| 42 | **Fix Retours à la Ligne Chat & Copie** | ✅ Fait | — |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

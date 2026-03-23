@@ -118,6 +118,11 @@ export function renderChatState(state) {
     // Artifact quick-access bar
     updateArtifactBar(state.availableArtifacts || []);
 
+    // Inject copy buttons on code blocks
+    if (anyChanged) {
+        injectCopyButtons(container);
+    }
+
     // Only auto-scroll if something changed AND user was near the bottom (or first load)
     if (anyChanged && (isNearBottom || isFirstLoad)) {
         requestAnimationFrame(() => {
@@ -305,6 +310,44 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+/**
+ * Inject copy-to-clipboard buttons into all <pre> blocks within a container.
+ * Skips blocks that already have a button.
+ */
+export function injectCopyButtons(container) {
+    if (!container) return;
+    const preBlocks = container.querySelectorAll('pre');
+    preBlocks.forEach(pre => {
+        if (pre.querySelector('.code-copy-btn')) return; // Already injected
+
+        const btn = document.createElement('button');
+        btn.className = 'code-copy-btn';
+        btn.setAttribute('aria-label', 'Copy code');
+        btn.innerHTML = `
+            <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span>Copy</span>
+        `;
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Hide button temporarily so innerText on the live DOM pre doesn't include "Copy"
+            btn.style.display = 'none';
+            const text = (pre.innerText || '').trim();
+            btn.style.display = '';
+            navigator.clipboard.writeText(text).then(() => {
+                btn.classList.add('copied');
+                btn.querySelector('span').textContent = 'Copied!';
+                btn.querySelector('svg').innerHTML = '<polyline points="20 6 9 17 4 12"/>';
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    btn.querySelector('span').textContent = 'Copy';
+                    btn.querySelector('svg').innerHTML = '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>';
+                }, 2000);
+            });
+        });
+        pre.appendChild(btn);
+    });
 }
 
 /**

@@ -402,53 +402,56 @@ export async function injectMessage(cdp, text) {
             document.execCommand("selectAll", false, null);
             document.execCommand("delete", false, null);
 
-            // Strategy 1: Single insertText for the entire message
-            // This avoids the line-by-line loop that caused partial sends
+            // Convert newlines to HTML <br> tags for rich text pasting
+            const htmlText = textToInsert.replace(/\\n/g, '<br>');
+
+            // Strategy 1: Simulate Rich Text Paste (Best for React/Draft.js/Lexical)
             let inserted = false;
             try {
-                const ok = document.execCommand("insertText", false, textToInsert);
-                if (ok && (editor.textContent || '').length >= Math.min(textToInsert.length, 20)) {
+                const dt = new DataTransfer();
+                dt.setData('text/plain', textToInsert);
+                dt.setData('text/html', htmlText);
+                
+                const pasteEvt = new ClipboardEvent('paste', {
+                    bubbles: true,
+                    cancelable: true,
+                    clipboardData: dt
+                });
+                editor.dispatchEvent(pasteEvt);
+                
+                // Wait for React to process the paste
+                await new Promise(r => setTimeout(r, 150));
+                
+                if ((editor.textContent || '').length >= Math.min(textToInsert.length, 10)) {
                     inserted = true;
                 }
-            } catch(e) { /* execCommand may throw in some contexts */ }
+            } catch(e) { }
 
-            // Strategy 2: Clipboard paste simulation fallback
+            // Strategy 2: Fallback to execCommand insertHTML
             if (!inserted) {
                 try {
-                    const dt = new DataTransfer();
-                    dt.setData('text/plain', textToInsert);
-                    const pasteEvt = new ClipboardEvent('paste', {
-                        bubbles: true,
-                        cancelable: true,
-                        clipboardData: dt
-                    });
-                    editor.dispatchEvent(pasteEvt);
-                    await new Promise(r => setTimeout(r, 100));
-                    if ((editor.textContent || '').length >= Math.min(textToInsert.length, 20)) {
+                    const ok = document.execCommand("insertHTML", false, htmlText);
+                    if (ok && (editor.textContent || '').length >= Math.min(textToInsert.length, 10)) {
                         inserted = true;
                     }
-                } catch(e) { /* paste fallback failed */ }
+                } catch(e) { }
             }
 
-            // Strategy 3: Direct DOM manipulation + React input event
+            // Strategy 3: Fallback to basic text insertion
             if (!inserted) {
-                editor.textContent = '';
-                const textNode = document.createTextNode(textToInsert);
-                editor.appendChild(textNode);
-                editor.dispatchEvent(new Event('input', { bubbles: true }));
-                editor.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, inputType: 'insertText', data: textToInsert }));
+                document.execCommand("insertText", false, textToInsert);
             }
 
-            // Wait for React to process the editor state change before clicking submit
+            // Wait for React editor to stabilize
             await new Promise(r => setTimeout(r, 300));
 
             const submitBtn = document.querySelector(SEL.controls.submitButton);
             if (submitBtn) {
                 submitBtn.click();
-                return { ok:true, method: inserted ? "execCommand_single" : "dom_fallback" };
+                return { ok:true, method: inserted ? "rich_paste" : "fallback" };
             }
 
-            // Fallback to Enter key simulation (if button not found for some reason)
+            // Fallback to Enter key simulation
             editor.dispatchEvent(new KeyboardEvent("keydown", { bubbles:true, key:"Enter", code:"Enter" }));
             editor.dispatchEvent(new KeyboardEvent("keyup", { bubbles:true, key:"Enter", code:"Enter" }));
 

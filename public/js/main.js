@@ -4,13 +4,13 @@
  */
 
 import { initWS } from './ws.js?v=11';
-import { elements, renderChatState, renderSnapshot, updateStateUI, toggleLayer } from './ui.js?v=13';
+import { elements, renderChatState, renderSnapshot, updateStateUI, toggleLayer } from './ui.js?v=15';
 import { sendMessage, stopGeneration, scrollToBottom } from './chat.js?v=10';
 import { loadHistory, startNewChat } from './history.js?v=12';
 import { loadProjects } from './projects.js?v=10';
 import { fetchWithAuth } from './api.js?v=10';
 import { initPicker, onTriggerChar, hidePicker, isPickerVisible, getWorkflowPrefix, clearWorkflow } from './picker.js?v=13';
-import { loadArtifacts, initArtifacts, flushDraftComments } from './artifacts.js?v=3';
+import { loadArtifacts, initArtifacts, flushDraftComments } from './artifacts.js?v=5';
 import { handleSelectorError } from './selectorError.js?v=1';
 
 /**
@@ -302,14 +302,18 @@ async function init() {
             sendMessage(prefix + finalText);
         }
         
-        // Release guard after a short delay to block any duplicate trigger
-        setTimeout(() => { _sendGuard = false; }, 1000);
+        // Release guard after a short delay (2 seconds instead of 1) to block duplicate trigger more forcefully
+        setTimeout(() => { _sendGuard = false; }, 2000);
     }
     
     // Expose for artifacts module
     window._doSend = doSend;
 
-    elements.sendBtn?.addEventListener('click', doSend);
+    // Use composedPath / preventDefault to ensure we only get the button click once
+    elements.sendBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        doSend();
+    });
     
     elements.chatInput?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {

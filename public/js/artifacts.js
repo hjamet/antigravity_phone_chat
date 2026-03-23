@@ -5,6 +5,7 @@
  */
 
 import { fetchWithAuth } from './api.js?v=10';
+import { injectCopyButtons } from './ui.js?v=15';
 
 /** @type {string|null} Currently viewed artifact name */
 let currentArtifact = null;
@@ -91,6 +92,9 @@ export async function openArtifactViewer(name) {
         // Render the draft comments section
         renderDraftList();
         updateSendButton();
+
+        // Inject copy buttons on code blocks in artifact viewer
+        injectCopyButtons(contentEl);
 
         // Update header info
         const proceedBtn = document.getElementById('artifactProceedBtn');

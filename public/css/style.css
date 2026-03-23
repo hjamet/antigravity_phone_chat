@@ -530,7 +530,9 @@ body {
 }
 
 .agent-msg .msg-body pre,
-.task-paragraph pre {
+.task-paragraph pre,
+.artifact-viewer-body pre {
+    position: relative;
     background: rgba(0, 0, 0, 0.35);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 8px;
@@ -545,11 +547,70 @@ body {
 }
 
 .agent-msg .msg-body pre code,
-.task-paragraph pre code {
+.task-paragraph pre code,
+.artifact-viewer-body pre code {
     background: none;
     padding: 0;
     border-radius: 0;
     font-size: inherit;
+}
+
+/* Copy button on code blocks */
+.code-copy-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-muted);
+    border-radius: 6px;
+    padding: 4px 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-family: 'Inter', sans-serif;
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s, color 0.2s;
+    z-index: 2;
+}
+
+pre:hover .code-copy-btn {
+    opacity: 1;
+}
+
+/* Always visible on touch devices */
+@media (hover: none) {
+    .code-copy-btn {
+        opacity: 0.7;
+    }
+}
+
+.code-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--text-main);
+}
+
+.code-copy-btn:active {
+    transform: scale(0.92);
+}
+
+.code-copy-btn.copied {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.3);
+    color: var(--success);
+    opacity: 1;
+}
+
+.code-copy-btn svg {
+    width: 14px;
+    height: 14px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
 .agent-msg .msg-body strong {

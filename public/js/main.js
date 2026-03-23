@@ -23,6 +23,11 @@ let _lastPollJson = '';
 let _wasConversationFinished = false;
 let _isTtsEnabled = localStorage.getItem('antigravity_tts') !== 'false';
 
+let _lastFinalMessageText = '';
+window._replayLastTTS = () => {
+    if (_lastFinalMessageText) playTTS(_lastFinalMessageText);
+};
+
 /**
  * Read text using Web Speech API TTS
  */
@@ -41,7 +46,27 @@ function playTTS(text) {
 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.volume = 1;
+    utterance.lang = 'fr-FR'; // Force language
+    
+    const voices = window.speechSynthesis.getVoices();
+    const frVoice = voices.find(v => v.lang.startsWith('fr'));
+    if (frVoice) utterance.voice = frVoice;
+
+    // Mobile hack: sometimes speech sync goes to sleep
+    if (window.speechSynthesis.resume) window.speechSynthesis.resume();
+    
     window.speechSynthesis.speak(utterance);
+    
+    // Visual debug
+    const dt = document.getElementById('statusText');
+    if (dt) dt.textContent = "🔊 Lecture...";
+    utterance.onend = () => {
+        if (dt) dt.textContent = "Ready";
+    };
+    utterance.onerror = (e) => {
+        if (dt) dt.textContent = "TTS Error: " + (e.error || e.type);
+        console.error("TTS Error", e);
+    };
 }
 
 /**
@@ -81,7 +106,17 @@ function showCompletionToast() {
     const toast = document.createElement('div');
     toast.id = 'completionToast';
     toast.className = 'completion-toast';
-    toast.textContent = '✅ Réponse reçue';
+    
+    toast.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px;">
+            <span>✅ Réponse reçue</span>
+            <button onclick="event.stopPropagation(); window._replayLastTTS()" 
+                    style="background:rgba(255,255,255,0.2); border:none; border-radius:12px; padding:4px 10px; color:white; font-size:12px; cursor:pointer; font-weight:600;">
+                ▶️ Lire
+            </button>
+        </div>
+    `;
+    
     toast.style.cursor = 'pointer';
     toast.style.pointerEvents = 'auto';
     toast.addEventListener('click', () => {
@@ -122,7 +157,8 @@ async function pollChatState() {
                     const finalMsgs = data.messages.filter(m => m.role !== 'user' && m.type !== 'taskBlock');
                     if (finalMsgs.length > 0) {
                         const finalMsg = finalMsgs[finalMsgs.length - 1];
-                        playTTS(finalMsg.content || '');
+                        _lastFinalMessageText = finalMsg.content || '';
+                        playTTS(_lastFinalMessageText);
                     }
                 }
             }

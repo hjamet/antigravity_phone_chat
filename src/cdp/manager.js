@@ -243,29 +243,53 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
 
             const isStreaming = wrapper ? !!wrapper.querySelector(SEL.chat.streamingIndicator) : false;
 
+            // --- Conversation Finished Detection (green dot on active pill) ---
+            let conversationFinished = false;
+            try {
+                const pills = Array.from(document.querySelectorAll(SEL.history.conversationPill));
+                const activePill = pills.find(p => {
+                    const btn = p.closest('button');
+                    return btn && (btn.classList.contains('bg-ide-editor-background') || btn.classList.contains('bg-ide-element-background') || btn.getAttribute('aria-selected') === 'true');
+                });
+                if (activePill) {
+                    const container = activePill.closest('button');
+                    if (container) {
+                        const greenDot = container.querySelector('.bg-green-500, .bg-green-400, [class*="bg-green-"]');
+                        if (greenDot) conversationFinished = true;
+                    }
+                }
+            } catch(e) { /* sidebar may not be visible */ }
+
             // --- Auto-Retry Logic ---
             let retryDetected = false;
             const retryBtn = document.querySelector(SEL.controls.retryButton);
-            const errorMsg = document.querySelector(SEL.controls.errorMessage);
+            const errorMsgs = Array.from(document.querySelectorAll(SEL.controls.errorMessage));
+            const hasTargetError = errorMsgs.some(el => (el.innerText || '').includes('Agent terminated due to error'));
             
-            if (retryBtn && errorMsg && (errorMsg.innerText || '').includes('Agent terminated due to error')) {
+            if (retryBtn && hasTargetError) {
                 retryDetected = true;
-                const delay = Math.floor(Math.random() * 2000);
-                console.log(\`[CDP] Error detected: "Agent terminated due to error". auto-clicking Retry in \${delay}ms...\`);
-                
-                // We use a non-blocking timeout within the browser context
-                setTimeout(() => {
-                    if (document.contains(retryBtn)) {
-                        retryBtn.click();
-                        console.log('[CDP] Auto-clicked Retry button.');
-                    }
-                }, delay);
+                if (!window.__antigravityRetryPending) {
+                    window.__antigravityRetryPending = true;
+                    const delay = Math.floor(Math.random() * 2000);
+                    console.log(\`[CDP] Error detected. Auto-clicking Retry in \${delay}ms...\`);
+                    setTimeout(() => {
+                        window.__antigravityRetryPending = false; // Reset flag so it can retry again if it fails
+                        const freshBtn = document.querySelector(SEL.controls.retryButton);
+                        if (freshBtn) {
+                            freshBtn.click();
+                            console.log('[CDP] Auto-clicked Retry button.');
+                        } else {
+                            console.log('[CDP] Auto-retry failed: button disappeared.');
+                        }
+                    }, delay);
+                }
             }
 
             return { 
                 messages: collected, 
                 isFull: false, 
-                isStreaming, 
+                isStreaming,
+                conversationFinished,
                 availableArtifacts, 
                 retryInfo: { detected: retryDetected },
                 scrollInfo: { scrollTop: chatScroll.scrollTop, scrollHeight, clientHeight } 

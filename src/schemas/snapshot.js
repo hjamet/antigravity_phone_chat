@@ -41,6 +41,7 @@ export const snapshotSchema = z.object({
     messages: z.array(messageSchema).optional(),
     isFull: z.boolean().optional(),
     isStreaming: z.boolean().optional(),
+    conversationFinished: z.boolean().optional(),
     availableArtifacts: z.array(z.string()).optional(),
     scrollInfo: z.any().optional()
 });

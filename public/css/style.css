@@ -1804,7 +1804,8 @@ textarea::-webkit-scrollbar {
     z-index: 9999;
     opacity: 0;
     transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
-    pointer-events: none;
+    pointer-events: auto;
+    cursor: pointer;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 .completion-toast.show {
@@ -2170,4 +2171,35 @@ textarea::-webkit-scrollbar {
 
 .error-btn.copied {
     background: #94e2d5 !important;
+}
+
+/* ===== History Card — Finished Dot (green pulse) ===== */
+.history-card-finished-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+    animation: finished-pulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
+@keyframes finished-pulse {
+    0%, 100% {
+        box-shadow: 0 0 4px rgba(34, 197, 94, 0.4);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 12px rgba(34, 197, 94, 0.8);
+        transform: scale(1.2);
+    }
+}
+
+/* History Card — Active spinner (continuous) */
+.history-card .spin-anim {
+    animation: spin-continuous 1s linear infinite;
+}
+@keyframes spin-continuous {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
 }

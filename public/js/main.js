@@ -20,18 +20,24 @@ import { handleSelectorError } from './selectorError.js?v=1';
  * when the backend has nothing new, which eliminates flickering completely.
  */
 let _lastPollJson = '';
-let _wasStreaming = false;
+let _wasConversationFinished = false;
 
 /**
- * Show a toast notification when the agent finishes responding
+ * Show a toast notification when the agent finishes responding.
+ * The toast is clickable and dismisses on tap.
  */
 function showCompletionToast() {
-    // Trigger native OS Notification if granted
+    // Trigger native OS Notification if granted (clickable via SW)
     if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("Antigravity", {
+        const notif = new Notification("Antigravity", {
             body: "✅ Agent a terminé de répondre",
-            icon: "/icons/icon-192.png"
+            icon: "/icons/icon-192.png",
+            data: { url: window.location.href }
         });
+        notif.onclick = () => {
+            window.focus();
+            notif.close();
+        };
     }
 
     // Avoid duplicate toasts
@@ -40,14 +46,22 @@ function showCompletionToast() {
     toast.id = 'completionToast';
     toast.className = 'completion-toast';
     toast.textContent = '✅ Réponse reçue';
+    toast.style.cursor = 'pointer';
+    toast.style.pointerEvents = 'auto';
+    toast.addEventListener('click', () => {
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+    });
     document.body.appendChild(toast);
     // Trigger enter animation on next frame
     requestAnimationFrame(() => toast.classList.add('show'));
-    // Auto-dismiss after 4 seconds
+    // Auto-dismiss after 6 seconds
     setTimeout(() => {
-        toast.classList.remove('show');
-        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
-    }, 4000);
+        if (toast.parentNode) {
+            toast.classList.remove('show');
+            toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+        }
+    }, 6000);
 }
 
 async function pollChatState() {
@@ -64,12 +78,12 @@ async function pollChatState() {
             renderChatState(data);
             if (!data.isStreaming) {
                 window.dispatchEvent(new Event('agent-stopped-streaming'));
-                // Show completion toast only on real streaming→idle transition
-                if (_wasStreaming) {
-                    showCompletionToast();
-                }
             }
-            _wasStreaming = data.isStreaming;
+            // Notify ONLY when conversationFinished transitions false→true
+            if (data.conversationFinished && !_wasConversationFinished) {
+                showCompletionToast();
+            }
+            _wasConversationFinished = !!data.conversationFinished;
         }
     } catch (e) {
         // Server unreachable — silent fail, will retry next tick
@@ -223,6 +237,7 @@ async function init() {
         }
         // Reset polling cache so the next poll triggers a full re-render
         _lastPollJson = '';
+        _wasConversationFinished = false;
         // Clear any pending user message
         window.pendingUserMessage = undefined;
     });

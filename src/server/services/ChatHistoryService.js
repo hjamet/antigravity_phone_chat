@@ -5,6 +5,7 @@ export class ChatHistoryService {
         this.chatTimeline = [];
         this.lastSnapshotHash = null;
         this.isStreaming = false;
+        this.conversationFinished = false;
         this.scrollInfo = null;
         this.ignoreUntil = 0;
         this.availableArtifacts = [];
@@ -29,6 +30,7 @@ export class ChatHistoryService {
         this.chatTimeline = [];
         this.lastSnapshotHash = null;
         this.isStreaming = false;
+        this.conversationFinished = false;
         this.scrollInfo = null;
         this.ignoreUntil = 0; // Legacy
         this.availableArtifacts = [];
@@ -94,6 +96,7 @@ export class ChatHistoryService {
         const validSnapshot = validation.data;
 
         this.isStreaming = validSnapshot.isStreaming || false;
+        this.conversationFinished = validSnapshot.conversationFinished || false;
         this.scrollInfo = validSnapshot.scrollInfo || null;
         if (validSnapshot.availableArtifacts && validSnapshot.availableArtifacts.length > 0) {
             this.availableArtifacts = validSnapshot.availableArtifacts;
@@ -209,6 +212,7 @@ export class ChatHistoryService {
             messages: [...this.chatTimeline],
             isFull: false,
             isStreaming: this.isStreaming,
+            conversationFinished: this.conversationFinished,
             scrollInfo: this.scrollInfo
         };
     }
@@ -289,6 +293,7 @@ export class ChatHistoryService {
             
             // State flags
             isStreaming: this.isStreaming,
+            conversationFinished: this.conversationFinished,
             messageCount: this.chatTimeline.length,
             
             // Full ordered message list

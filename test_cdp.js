@@ -36,22 +36,17 @@ async function main() {
 
     const SCRIPT = `(() => {
         const retryBtn = document.querySelector('#antigravity\\\\.agentSidePanelInputBox footer button.bg-ide-button-background');
-        const errorMsg = document.querySelector('.text-sm.font-medium');
-        
-        return {
-            retryBtnFound: !!retryBtn,
-            retryBtnVisible: retryBtn ? retryBtn.offsetParent !== null : false,
-            errorMsgFound: !!errorMsg,
-            errorMsgText: errorMsg ? errorMsg.innerText : null,
-            retryBtnHtml: retryBtn ? retryBtn.outerHTML : null
-        };
+        if (retryBtn) {
+            retryBtn.click();
+            return { success: true, method: "raw .click()" };
+        }
+        return { success: false, reason: "button not found" };
     })()`;
 
     const res = await callCdp(ws, 'Runtime.evaluate', {
         expression: SCRIPT, returnByValue: true, awaitPromise: true
     });
-    console.log("Validation Selectors Result:");
-    console.log(JSON.stringify(res.result.value, null, 2));
+    console.log("Click result: ", JSON.stringify(res.result.value, null, 2));
     ws.close();
 }
 

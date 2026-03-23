@@ -376,8 +376,8 @@ function handleTextSelection() {
         document.body.appendChild(popover);
     }
     
-    // Position slightly above the selection
-    popover.style.top = (rect.top + window.scrollY - 40) + 'px';
+    // Position slightly below the selection
+    popover.style.top = (rect.bottom + window.scrollY + 10) + 'px';
     popover.style.left = (rect.left + window.scrollX + (rect.width / 2)) + 'px';
     popover.style.display = 'flex';
     

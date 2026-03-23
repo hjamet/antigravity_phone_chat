@@ -799,7 +799,7 @@ export async function getChatHistory(cdp) {
                     });
                 }
 
-                let isFinished=false;if(container){const greenDot=container.querySelector('.bg-green-500, .bg-green-400, [class*="bg-green-"]');if(greenDot)isFinished=true;}let workspace='Other';
+                let isFinished=false;if(container){const unreadDot=container.querySelector(SEL.history.unreadDot);if(unreadDot)isFinished=true;}let workspace='Other';
                 const section = pill.closest(SEL.history.sectionContainer);
                 if (section) {
                     const header = section.querySelector(SEL.history.sectionHeader);

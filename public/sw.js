@@ -1,5 +1,5 @@
 // Service Worker for Antigravity Connect PWA
-const CACHE_NAME = 'ag-connect-v17';
+const CACHE_NAME = 'ag-connect-v19';
 
 // Static assets to pre-cache on install
 const PRECACHE_ASSETS = [

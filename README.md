@@ -104,7 +104,7 @@ L'application agit comme un proxy intelligent :
 | 2 | Pont CDP Manager | ✅ Fait | [agent-manager-bridge.md](docs/tasks/agent-manager-bridge.md) |
 | 3 | Gestion de Workspace | ✅ Fait | [create-open-workspace.md](docs/tasks/create-open-workspace.md) |
 | 4 | Chat par Projet | ✅ Fait | [chat-in-project.md](docs/tasks/chat-in-project.md) |
-| 5 | **Chat History enrichi** | ✅ Fait | [chat-history-ui.md](docs/tasks/chat-history-ui.md) |
+| 5 | **Chat History enrichi** | ✅ Fait | [chat-history-ui.md](docs/tasks/chat-history-ui.md) (Inclut désormais l'affichage complet des titres longs via retour à la ligne) |
 | 6 | Cleanup UI Mobile | ✅ Fait | [cleanup-ui-mobile.md](docs/tasks/cleanup-ui-mobile.md) |
 | 7 | Interface Projets Mobile | ✅ Fait | [project-selector-ui.md](docs/tasks/project-selector-ui.md) |
 | 8 | **Refactoring Structurel** | ✅ Fait | [structural-refactoring.md](docs/tasks/structural-refactoring.md) |
@@ -141,7 +141,7 @@ L'application agit comme un proxy intelligent :
 | 40 | **Fix Server Crash on Picker Selection** | ✅ Fait | [fix-server-crash-picker.md](docs/tasks/fix-server-crash-picker.md) |
 | 41 | **Screenshot Agent Manager** | ✅ Fait | — |
 | 42 | **Fix Retours à la Ligne Chat & Copie** | ✅ Fait | — |
-| 43 | **Indicateur Conversations Non Lues** | ✅ Fait | — |
+| 43 | **Indicateur Conversations Non Lues** | ✅ Fait | (Refonte Backend CDP + Frontend Stateless) |
 | 44 | **MeowTalker 3000** | 🧪 Test | [meowtalker_spec.md](docs/tasks/meowtalker_spec.md) |
 | 45 | **Fix Autoplay Mobile TTS** | ✅ Fait | [mobile-tts-autoplay-fix.md](docs/tasks/mobile-tts-autoplay-fix.md) |
 | 46 | **Fix Double Envoi Messages** | ✅ Fait | — |

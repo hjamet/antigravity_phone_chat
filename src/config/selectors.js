@@ -72,6 +72,7 @@ export const SELECTORS = {
         sectionContainer: '.flex.flex-col.gap-px',                                // Section grouping conversations
         sectionHeader: 'span.text-sm.font-medium.flex-shrink-0.truncate',         // Workspace name header
         activeSpinner: '.google-symbols',                                         // Active spinner icon container
+        unreadDot: '.bg-primary.rounded-full, .animate-unread-ping',              // Unread conversation indicator
     },
 
     // ---- State reading (mode/model/workspace) ----

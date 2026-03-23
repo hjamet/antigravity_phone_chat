@@ -34,7 +34,26 @@ let _ttsIsPlaying = false;
 let _ttsDebugToast = null;
 let _activeTtsHash = null;
 
+let _audioCtx = null;
+let _currentSource = null;
+
+function getAudioContext() {
+    if (!_audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        _audioCtx = new AudioContext();
+    }
+    return _audioCtx;
+}
+
 function stopTTS() {
+    if (_currentSource) {
+        try {
+            _currentSource.onended = null;
+            _currentSource.stop();
+        } catch(e) {}
+        _currentSource = null;
+    }
+
     const audioEl = document.getElementById('ttsAudio');
     if (audioEl) {
         audioEl.pause();
@@ -84,32 +103,20 @@ window.toggleMsgTTS = function(btn) {
  * Shows a badge on the history button + a clickable toast.
  */
 let _knownFinished = new Set();  // titles of chats we already knew were finished
-let _unreadFinished = new Set(); // titles of chats that finished but user hasn't opened
 let _unreadInitialized = false;  // first poll is just a baseline, don't alert
 
-function getUnreadSet() {
-    try {
-        const arr = JSON.parse(localStorage.getItem('antigravity_unread_finished')) || [];
-        return new Set(arr);
-    } catch(e) { return new Set(); }
-}
-
-function saveUnreadSet(s) {
-    try { localStorage.setItem('antigravity_unread_finished', JSON.stringify([...s])); } catch(e) {}
-}
-
-function updateHistoryBadge() {
+function updateHistoryBadge(count) {
     const btn = document.getElementById('historyBtn');
     if (!btn) return;
     let badge = btn.querySelector('.unread-badge');
-    if (_unreadFinished.size > 0) {
+    if (count > 0) {
         if (!badge) {
             badge = document.createElement('span');
             badge.className = 'unread-badge';
             btn.style.position = 'relative';
             btn.appendChild(badge);
         }
-        badge.textContent = _unreadFinished.size;
+        badge.textContent = count;
         badge.style.display = 'flex';
     } else if (badge) {
         badge.style.display = 'none';
@@ -149,16 +156,10 @@ async function pollUnreadConversations() {
         });
 
         if (!_unreadInitialized) {
-            // First run: seed the baseline, restore unread from localStorage
+            // First run: seed the baseline
             _knownFinished = currentFinished;
-            _unreadFinished = getUnreadSet();
-            // Clean up: remove from unread any chats that are no longer finished (re-opened)
-            for (const t of _unreadFinished) {
-                if (!currentFinished.has(t)) _unreadFinished.delete(t);
-            }
-            saveUnreadSet(_unreadFinished);
             _unreadInitialized = true;
-            updateHistoryBadge();
+            updateHistoryBadge(currentFinished.size);
             return;
         }
 
@@ -166,27 +167,25 @@ async function pollUnreadConversations() {
         for (const title of currentFinished) {
             if (!_knownFinished.has(title)) {
                 // This chat just finished!
-                _unreadFinished.add(title);
                 showUnreadToast(title);
             }
         }
 
         _knownFinished = currentFinished;
-        saveUnreadSet(_unreadFinished);
-        updateHistoryBadge();
+        updateHistoryBadge(currentFinished.size);
     } catch(e) { /* silent */ }
 }
 
-/** Mark a chat as read (remove from unread set) */
+/** Mark a chat as read locally to update badge instantly before next poll */
 function markChatRead(title) {
-    _unreadFinished.delete(title);
-    saveUnreadSet(_unreadFinished);
-    updateHistoryBadge();
+    if (_knownFinished.has(title)) {
+        _knownFinished.delete(title);
+        updateHistoryBadge(_knownFinished.size);
+    }
 }
 
 // Expose for history.js
 window._markChatRead = markChatRead;
-window._getUnreadFinished = () => _unreadFinished;
 
 /**
  * Read text using Server-Side TTS API
@@ -194,12 +193,8 @@ window._getUnreadFinished = () => _unreadFinished;
 async function playTTS(text, hash = null) {
     _lastFinalMessageText = text;
     
-    const audioEl = document.getElementById('ttsAudio');
-    if (audioEl) {
-        audioEl.pause();
-        audioEl.currentTime = 0;
-    }
-    _ttsQueue = [];
+    stopTTS(); // Ensures queue is empty and current playback stopped
+    
     _ttsIsPlaying = false;
     _activeTtsHash = hash;
 
@@ -247,7 +242,7 @@ async function playTTS(text, hash = null) {
     }
 }
 
-function playNextTTSChunk() {
+async function playNextTTSChunk() {
     if (_ttsQueue.length === 0) {
         stopTTS();
         return;
@@ -255,23 +250,37 @@ function playNextTTSChunk() {
     
     _ttsIsPlaying = true;
     const url = _ttsQueue.shift();
-    const audioEl = document.getElementById('ttsAudio');
-    if (!audioEl) return;
     
-    audioEl.src = url;
-    audioEl.playbackRate = 1.3; // Accelerate TTS playback
-    audioEl.onended = () => {
-        playNextTTSChunk();
-    };
-    audioEl.onerror = () => {
-        console.error('TTS Audio Playback Error');
-        playNextTTSChunk();
-    };
-    
-    audioEl.play().catch(e => {
-        console.error('Autoplay prevented:', e);
+    try {
+        const ctx = getAudioContext();
+        if (ctx.state === 'suspended') {
+            await ctx.resume().catch(()=>{});
+        }
+        
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        
+        ctx.decodeAudioData(arrayBuffer, (audioBuffer) => {
+            _currentSource = ctx.createBufferSource();
+            _currentSource.buffer = audioBuffer;
+            _currentSource.playbackRate.value = 1.35;
+            _currentSource.connect(ctx.destination);
+            
+            _currentSource.onended = () => {
+                _currentSource = null;
+                playNextTTSChunk();
+            };
+            
+            _currentSource.start(0);
+        }, (err) => {
+            console.error('Audio decode error', err);
+            playNextTTSChunk(); // Skip chunk
+        });
+        
+    } catch (e) {
+        console.error('Web Audio API error:', e);
         stopTTS();
-    });
+    }
 }
 
 /**
@@ -279,6 +288,13 @@ function playNextTTSChunk() {
  */
 let _ttsWarmedUp = false;
 function warmupTTS() {
+    try {
+        const ctx = getAudioContext();
+        if (ctx.state === 'suspended') {
+            ctx.resume().catch(()=>{});
+        }
+    } catch(e) {}
+
     if (!_ttsWarmedUp) {
         const audioEl = document.getElementById('ttsAudio');
         if (audioEl) {

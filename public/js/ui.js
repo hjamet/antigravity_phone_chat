@@ -10,6 +10,7 @@ export const elements = {
     statusText: document.getElementById('statusText'),
     chatInput: document.getElementById('messageInput'),
     sendBtn: document.getElementById('sendBtn'),
+    workflowBtn: document.getElementById('workflowBtn'),
     stopBtn: document.getElementById('stopBtn'),
     historyList: document.getElementById('historyList'),
     projectList: document.getElementById('projectsList'),

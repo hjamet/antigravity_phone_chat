@@ -31,6 +31,14 @@ export function initPicker() {
         inputSection.prepend(pickerEl);
         inputSection.prepend(badgeEl);
     }
+    
+    const workflowBtn = document.getElementById('workflowBtn');
+    if (workflowBtn) {
+        workflowBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            onTriggerChar();
+        });
+    }
 }
 
 /**

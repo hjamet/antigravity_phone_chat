@@ -132,6 +132,8 @@ L'application agit comme un proxy intelligent :
 | 33 | **Démonstration Artefacts** | ✅ Fait | [demo-artifacts.md](docs/tasks/demo-artifacts.md) |
 | 34 | **Lecture Auto TTS** | ✅ Fait | [tts-auto-read.md](docs/tasks/tts-auto-read.md) |
 | 35 | **Fix State Switch Conversation** | ✅ Fait | [fix-chat-switch-state.md](docs/tasks/fix-chat-switch-state.md) |
+| 36 | **Bouton Sélecteur de Workflow Mobile** | ⏳ À Faire | [mobile-workflow-selector.md](docs/tasks/mobile-workflow-selector.md) |
+| 37 | **Server-Side TTS** | ⏳ À Faire | [server-side-tts.md](docs/tasks/server-side-tts.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

@@ -52,21 +52,28 @@ function playTTS(text) {
     const frVoice = voices.find(v => v.lang.startsWith('fr'));
     if (frVoice) utterance.voice = frVoice;
 
-    // Mobile hack: sometimes speech sync goes to sleep
+    // Mobile hack: resume to unlock engine
     if (window.speechSynthesis.resume) window.speechSynthesis.resume();
     
     window.speechSynthesis.speak(utterance);
     
-    // Visual debug
-    const dt = document.getElementById('statusText');
-    if (dt) dt.textContent = "🔊 Lecture...";
+    // Visual debug toast to confirm playTTS was called
+    const debugToast = document.createElement('div');
+    debugToast.textContent = '🔊 Lecture TTS en cours...';
+    debugToast.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:8px 16px;border-radius:20px;z-index:9999;font-size:12px;pointer-events:none;';
+    document.body.appendChild(debugToast);
+    
     utterance.onend = () => {
-        if (dt) dt.textContent = "Ready";
+        if (debugToast.parentNode) debugToast.remove();
     };
     utterance.onerror = (e) => {
-        if (dt) dt.textContent = "TTS Error: " + (e.error || e.type);
+        debugToast.textContent = "🔊 TTS Error: " + (e.error || e.type);
+        setTimeout(() => { if (debugToast.parentNode) debugToast.remove(); }, 3000);
         console.error("TTS Error", e);
     };
+    
+    // Failsafe removal
+    setTimeout(() => { if (debugToast.parentNode) debugToast.remove(); }, 8000);
 }
 
 /**
@@ -79,6 +86,10 @@ function warmupTTS() {
         u.volume = 0;
         window.speechSynthesis.cancel();
         window.speechSynthesis.speak(u);
+        // Hack: pause right after speaking so an utterance stays in the queue
+        setTimeout(() => {
+            if (window.speechSynthesis.pause) window.speechSynthesis.pause();
+        }, 50);
         _ttsWarmedUp = true;
     }
 }
@@ -148,9 +159,14 @@ async function pollChatState() {
                 if (_isTtsEnabled && data.messages) {
                     const finalMsgs = data.messages.filter(m => m.role !== 'user' && m.type !== 'taskBlock');
                     if (finalMsgs.length > 0) {
-                        const finalMsg = finalMsgs[finalMsgs.length - 1];
-                        _lastFinalMessageText = finalMsg.content || '';
-                        playTTS(_lastFinalMessageText);
+                        const last = finalMsgs[finalMsgs.length - 1];
+                        if (last.content) {
+                            playTTS(last.content);
+                        } else {
+                            playTTS("L'agent a terminé de générer une réponse.");
+                        }
+                    } else {
+                        playTTS("L'agent a terminé de générer une réponse.");
                     }
                 }
             }

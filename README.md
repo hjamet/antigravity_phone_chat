@@ -36,7 +36,7 @@ L'application agit comme un proxy intelligent :
 - **Artefacts & Commentaires** : Visualisation des artefacts Antigravity avec rendu markdown fidèle. Ajout de **commentaires contextuels rapides** : sélection de texte → highlight jaune visible (bordure + icône 💬) + badge compteur. Cliquer/taper un highlight ouvre un popover pour éditer/supprimer. **Support mobile complet** : sélection tactile détectée via `touchend` + `selectionchange`, popover positionné en `fixed` avec gestion above/below. Les commentaires sont injectés en XML au prochain envoi de message.
 - **Injection Message Fiable** : Envoi de messages via CDP avec 3 stratégies d'insertion (single `execCommand`, paste simulation, DOM direct) évitant les troncatures de messages longs.
 - **Smart Scrolling** : Scroll forcé dans l'Agent Manager (CDP). Interface web avec auto-scroll intelligent (seulement si en bas) et notification toast « ✅ Réponse reçue » à la fin du streaming.
-- **Diagnostic Erreur Sélecteur** : En cas de sélecteur cassé, une bannière "Streamlit-like" apparaît sur le web avec un rapport LLM-ready et un snapshot du DOM complet. Arrêt automatique du polling serveur sur erreur.
+- **Diagnostic Erreur Sélecteur** : Philosophie "Fail-Fast / No-Fallback". Lors d'un sélecteur CDP cassé (ex: `triggerPicker`), une bannière d'erreur apparaît sur l'UI avec le DOM et un prompt prêt pour le LLM. **Nouveauté** : L'erreur d'une action utilisateur ne bloque plus le polling global ; seules les erreurs critiques sur l'extracteur racine (`captureSnapshot`) mettent l'application en pause pour éviter le spam.
 - **PWA Installable** : L'application est installable sur Android (et tout navigateur compatible PWA) avec un manifest W3C, un Service Worker et une bannière d'installation personnalisée.
 - **Auto-Retry Agent** : Détection automatique des erreurs "Agent terminated due to error" et clic sur le bouton "Retry" après un délai aléatoire (0-2s) pour une reprise fluide sans intervention manuelle.
 
@@ -133,7 +133,10 @@ L'application agit comme un proxy intelligent :
 | 34 | **Lecture Auto TTS** | ✅ Fait | [tts-auto-read.md](docs/tasks/tts-auto-read.md) |
 | 35 | **Fix State Switch Conversation** | ✅ Fait | [fix-chat-switch-state.md](docs/tasks/fix-chat-switch-state.md) |
 | 36 | **Bouton Sélecteur de Workflow Mobile** | ⏳ À Faire | [mobile-workflow-selector.md](docs/tasks/mobile-workflow-selector.md) |
-| 37 | **Server-Side TTS** | ⏳ À Faire | [server-side-tts.md](docs/tasks/server-side-tts.md) |
+| 37 | **Server-Side TTS** | ✅ Fait | [server-side-tts.md](docs/tasks/server-side-tts.md) |
+| 38 | **Fix Empty Chat Bug (Selector Error Pause)** | ✅ Fait | — |
+| 39 | **Fix Workflow Picker Overlays** | ✅ Fait | [fix-workflow-picker-overlays.md](docs/tasks/fix-workflow-picker-overlays.md) |
+| 40 | **Fix Server Crash on Picker Selection** | ✅ Fait | [fix-server-crash-picker.md](docs/tasks/fix-server-crash-picker.md) |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

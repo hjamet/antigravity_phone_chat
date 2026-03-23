@@ -192,8 +192,16 @@ async function initCDP() {
 
     if (cdpConnections.manager) {
         managerCdp.onSelectorError((report) => {
-            console.log('🛑 Selector error detected! Pausing polling.');
-            selectorErrorState.active = true;
+            console.log(`🛑 Selector error detected in ${report.function}!`);
+            
+            // Only pause polling if the error occurred in the critical polling loop (captureSnapshot)
+            if (report.function === 'captureSnapshot') {
+                console.log('⏸️ Pausing polling to prevent error spam.');
+                selectorErrorState.active = true;
+            } else {
+                console.log('▶️ Non-critical selector error, polling will proceed.');
+            }
+            
             selectorErrorState.report = report;
             // Broadcast the error immediately to the frontend
             if (global.wssInstance) {
@@ -312,6 +320,7 @@ async function createServer() {
         isLocalRequest
     });
     wss.broadcastUpdate = wsHandler.broadcastUpdate;
+    wss.broadcastSelectorError = wsHandler.broadcastSelectorError;
 
     setupRoutes(app, {
         cdpConnections,

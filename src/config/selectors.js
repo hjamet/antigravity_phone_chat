@@ -82,11 +82,11 @@ export const SELECTORS = {
 
     // ---- Picker popups (/ and @ triggers) ----
     picker: {
-        dialog: 'div[role="dialog"][style*="visibility: visible"]',               // Visible picker popup
-        options: 'div[role="dialog"][style*="visibility: visible"] .flex.items-center.justify-start.gap-2', // Clickable option rows
+        dialog: '.absolute.-top-2.-translate-y-full.bg-ide-editor-background, div[role="listbox"][aria-label="Typeahead menu"]',               // Visible picker popup (now direct typeahead overlay)
+        options: '.flex.items-center.justify-start.gap-2, .flex.w-full.px-2.py-1.items-center.gap-2.cursor-pointer', // Clickable option rows
         typeaheadList: 'div[role="listbox"][aria-label="Typeahead menu"]',         // Secondary typeahead list
         typeaheadItem: 'div[role="listbox"][aria-label="Typeahead menu"] > div',   // Individual typeahead option
-        workflowList: '.absolute.-top-2.-translate-y-full.bg-ide-editor-background', // Workflow list overlay
+        workflowList: 'div[role="listbox"][aria-label="Typeahead menu"], .absolute.-top-2.-translate-y-full.bg-ide-editor-background', // Workflow list overlay
     },
 
     // ---- Artifacts / Changes Panel ----

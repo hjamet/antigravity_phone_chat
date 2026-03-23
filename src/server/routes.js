@@ -1,6 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import { join } from 'path';
+import * as googleTTS from 'google-tts-api';
 
 /**
  * Setup Express routes for the application
@@ -201,6 +202,33 @@ export function setupRoutes(app, {
         res.json({ success: true });
     });
 
+    router.post('/api/tts', async (req, res) => {
+        const { text } = req.body;
+        if (!text) return res.status(400).json({ error: 'Text required' });
+
+        try {
+            // Remove markdown before generating TTS
+            const cleanText = text
+                .replace(/```[\s\S]*?```/g, 'Bloc de code.')
+                .replace(/`([^`]+)`/g, '$1')
+                .replace(/[#*_-]/g, '')
+                .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+                .replace(/\]\]/g, '')
+                .replace(/\[\[/g, '');
+
+            const urls = googleTTS.getAllAudioUrls(cleanText || "Terminé.", {
+                lang: 'fr',
+                slow: false,
+                host: 'https://translate.google.com',
+                splitPunct: ',.?!'
+            });
+            res.json({ urls: urls.map(u => u.url) });
+        } catch (e) {
+            console.error('TTS Audio Generation Error:', e);
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // ... End of route list ...
 
     router.post('/new-chat', async (req, res) => {
@@ -343,6 +371,7 @@ export function setupRoutes(app, {
         const { char } = req.body;
         if (char !== '/' && char !== '@') return res.status(400).json({ error: 'char must be "/" or "@"' });
         const result = await managerCdp.triggerPicker(cdpConnections.manager, char);
+        console.log("TRIGGER PICKER RESULT:", JSON.stringify(result).substring(0, 500));
         res.json(result);
     });
 

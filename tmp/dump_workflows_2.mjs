@@ -28,6 +28,19 @@ function callCdp(ws, method, params = {}) {
     });
 }
 
+function waitForMessage(ws, check) {
+    return new Promise((resolve) => {
+        const handler = (data) => {
+            const msg = JSON.parse(data);
+            if (check(msg)) {
+                ws.removeListener('message', handler);
+                resolve(msg);
+            }
+        };
+        ws.on('message', handler);
+    });
+}
+
 async function main() {
     const list = await getJson('http://127.0.0.1:9000/json/list');
     const manager = list.find(t => t.title === 'Manager' && t.url && t.url.includes('workbench-jetski-agent.html'));
@@ -36,47 +49,36 @@ async function main() {
     const ws = new WebSocket(manager.webSocketDebuggerUrl);
     await new Promise(r => ws.on('open', r));
     await callCdp(ws, 'Runtime.enable');
-
+    
+    // Get contexts
+    const msg = await callCdp(ws, 'Runtime.evaluate', { expression: "typeof window", returnByValue: false });
+    
+    // Evaluate across all contexts to find the right one
     const SCRIPT = `(async () => {
-        try {
-            const editor = document.querySelector('[contenteditable="true"][role="textbox"]');
-            if (editor) {
-                editor.focus();
-                document.execCommand("selectAll", false, null);
-                document.execCommand("delete", false, null);
-                await new Promise(r => setTimeout(r, 100));
-
-                document.execCommand("insertText", false, "/");
-                await new Promise(r => setTimeout(r, 1500)); 
-                
-                // Also trigger workflows category click if dialog is here
-                const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
-                if (dialogs.length > 0) {
-                    const dialog = dialogs[dialogs.length - 1];
-                    const categoryBtns = dialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
-                    if (categoryBtns.length >= 3) {
-                        categoryBtns[2].click();
-                        await new Promise(r => setTimeout(r, 1500)); 
-                    }
-                }
-            }
-            return { html: document.body.innerHTML };
-        } catch (e) {
-            return { error: e.message };
+        const editor = document.querySelector('[contenteditable="true"][role="textbox"]');
+        if (!editor) throw new Error("no editor");
+        
+        const workflowList = document.querySelector('.absolute.-top-2.-translate-y-full.bg-ide-editor-background');
+        if (workflowList) {
+            return { html: workflowList.outerHTML };
+        } else {
+            // Check for dialog
+            const dialogs = document.querySelectorAll('[role="dialog"]');
+            if (dialogs.length > 0) return { dialogsHtml: Array.from(dialogs).map(d => d.outerHTML) };
+            
+            return { error: "No picker found" };
         }
     })()`;
 
-    const res = await callCdp(ws, 'Runtime.evaluate', {
-        expression: SCRIPT, returnByValue: true, awaitPromise: true
-    });
+    // To find the right context, we just loop evaluation contexts?
+    // Wait, CDP doesn't give us contexts easily without Page.enable. Let's just use Page.enable!
+    await callCdp(ws, 'Page.enable');
     
-    if (res.result?.value?.error) {
-        console.error("Error from CDP:", res.result.value.error);
-    } else {
-        fs.writeFileSync('tmp/picker_analysis.html', res.result?.value?.html || '');
-        console.log("Saved to tmp/picker_analysis.html");
-    }
+    // Just inject it into all frames/runtimes?
+    // Let's use Runtime.evaluate without contextId, we might get lucky? No, manager.js uses context tracking.
+    // Instead of doing manual context logic, why don't we just modify manager.js on the server to print out `.absolute.-top-2` html into server_log.txt when someone opens it!
     
+    console.log("Script stopped. Easiest path is writing a test dump in manager.js");
     ws.close();
 }
 

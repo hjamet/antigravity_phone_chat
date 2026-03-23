@@ -31,3 +31,4 @@
 | [Démonstration Artefacts](tasks/demo-artifacts.md) | Session de test et présentation des artefacts | 2026-03-23 | `Up to date` |
 | [Lecture Auto TTS](tasks/tts-auto-read.md) | Lecture vocale automatique de la réponse finale | 2026-03-23 | `Up to date` |
 | [Fix State Switch Conversation](tasks/fix-chat-switch-state.md) | Correction du chargement d'état (isStreaming, artefacts) lors d'un switch de conversation | 2026-03-23 | `Up to date` |
+| [Fix Server Crash on Picker Selection](tasks/fix-server-crash-picker.md) | Résolution de l'erreur ReferenceError `EXP is not defined` | 2026-03-23 | `Up to date` |

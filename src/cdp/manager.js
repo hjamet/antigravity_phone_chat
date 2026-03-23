@@ -1039,57 +1039,53 @@ export async function triggerPicker(cdp, char) {
 
     const EXPRESSION = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
-        const editor = document.querySelector(SEL.controls.editor);
-        if (!editor) throw new Error('[CDP] Selector broken: "' + SEL.controls.editor + '" \u2014 not found in triggerPicker()');
+        try {
+            const editor = document.querySelector(SEL.controls.editor);
+            if (!editor) throw new Error('[CDP] Selector broken: "' + SEL.controls.editor + '" \u2014 not found in triggerPicker()');
             if(typeof lastValidRoot !== 'undefined') lastValidRoot = editor;
 
-        editor.focus();
-        // Clear existing content
-        document.execCommand("selectAll", false, null);
-        document.execCommand("delete", false, null);
-        await new Promise(r => setTimeout(r, 100));
+            editor.focus();
+            // Clear existing content
+            document.execCommand("selectAll", false, null);
+            document.execCommand("delete", false, null);
+            await new Promise(r => setTimeout(r, 100));
 
-        // Insert trigger char via execCommand (React detects this natively).
-        // Do NOT dispatch an extra InputEvent — execCommand fires one internally.
-        document.execCommand("insertText", false, ${safeChar});
+            // Insert trigger char via execCommand
+            document.execCommand("insertText", false, ${safeChar});
 
-        // Wait for picker dialog to appear
-        await new Promise(r => setTimeout(r, 1000));
+            // The UI directly shows the workflow/mentions list for '/' or '@'
+            // No category dialog intermediate step anymore.
+            let items = null;
+            for (let attempt = 0; attempt < 15; attempt++) {
+                await new Promise(r => setTimeout(r, 200));
 
-        const dialogs = Array.from(document.querySelectorAll(SEL.picker.dialog));
-        if (dialogs.length === 0) throw new Error('[CDP] Selector broken: "' + SEL.picker.dialog + '" — picker did not appear in triggerPicker()');
-        
-        // Always take the LAST dialog as popups are appended to the end of the DOM
-        const dialog = dialogs[dialogs.length - 1];
-
-        // Auto-click the Workflows category
-        const categoryBtns = dialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
-        const targetBtn = categoryBtns[${targetIndex}];
-        if (!targetBtn) throw new Error('[CDP] Category index ${targetIndex} not found. Only ' + categoryBtns.length + ' categories.');
-            if(typeof lastValidRoot !== 'undefined') lastValidRoot = targetBtn;
-
-        targetBtn.click();
-
-        // Retry loop: wait for the workflow overlay to appear
-        let items = null;
-        for (let attempt = 0; attempt < 6; attempt++) {
-            await new Promise(r => setTimeout(r, 400));
-
-            const workflowList = document.querySelector(SEL.picker.workflowList);
-            if (workflowList && workflowList.children.length > 0) {
-                const found = [];
-                Array.from(workflowList.children).forEach((child, i) => {
-                    const text = child.innerText?.trim() || '';
-                    if (text) found.push({ index: found.length, label: text, domIndex: i });
-                });
-                if (found.length > 0) { items = { ok: true, type: 'workflow', items: found }; break; }
+                const workflowList = document.querySelector(SEL.picker.workflowList);
+                if (workflowList) {
+                    const options = workflowList.querySelectorAll(':scope > div, [role="option"]');
+                    if (options.length > 0) {
+                        const found = [];
+                        Array.from(options).forEach((child, i) => {
+                            const text = child.innerText?.trim() || '';
+                            if (text) found.push({ index: found.length, label: text, domIndex: i });
+                        });
+                        if (found.length > 0) { items = { ok: true, type: 'workflow', items: found }; break; }
+                    }
+                }
             }
+
+            if (!items) {
+                throw new Error('[CDP] Selector broken: "' + SEL.picker.workflowList + '" \u2014 workflow list not found or empty after 6 attempts in triggerPicker()');
+            }
+
+            return items;
+
+        } catch(e) {
+            return { 
+                error: e.message, 
+                domDump: document.body.innerHTML,
+                lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML : ''
+            };
         }
-
-        // Do NOT clear the editor — leave the "/" and let the workflow selection
-        // insert a BeautifulMention in the Agent Manager editor naturally.
-
-        return items || { ok: true, type: 'empty', items: [] };
     })()`;
 
     return await runCdpScript(cdp, EXPRESSION, 'triggerPicker');
@@ -1111,7 +1107,7 @@ export async function selectPickerOption(cdp, index) {
         if (dialogs.length === 0) throw new Error('[CDP] Selector broken: "' + SEL.picker.dialog + '" — picker not visible in selectPickerOption()');
         const dialog = dialogs[dialogs.length - 1];
 
-        const optionEls = dialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
+        const optionEls = dialog.querySelectorAll(SEL.picker.options);
         const target = optionEls[${Number(index)}];
         if (!target) throw new Error('[CDP] Option index ${index} not found in selectPickerOption(). Only ' + optionEls.length + ' options available.');
             if(typeof lastValidRoot !== 'undefined') lastValidRoot = target;
@@ -1133,7 +1129,7 @@ export async function selectPickerOption(cdp, index) {
         const newDialogs = Array.from(document.querySelectorAll(SEL.picker.dialog));
         const newDialog = newDialogs.length > 0 ? newDialogs[newDialogs.length - 1] : null;
         if (newDialog && newDialog !== dialog) {
-            const newOpts = newDialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
+            const newOpts = newDialog.querySelectorAll(SEL.picker.options);
             const items = Array.from(newOpts).map((el, i) => ({
                 index: i,
                 label: el.innerText?.trim() || '',
@@ -1144,7 +1140,7 @@ export async function selectPickerOption(cdp, index) {
         return { ok: true, type: 'direct', items: [] };
     })()`;
 
-    return await runCdpScript(cdp, EXP, 'selectPickerOption');
+    return await runCdpScript(cdp, EXPRESSION, 'selectPickerOption');
 }
 
 /**
@@ -1157,21 +1153,25 @@ export async function selectTypeaheadItem(cdp, index) {
 
     const EXPRESSION = `(async () => {
         const SEL = ${JSON.stringify(SELECTORS)};
-
-        const typeahead = document.querySelector(SEL.picker.typeaheadList);
-        if (!typeahead) throw new Error('[CDP] Selector broken: "' + SEL.picker.typeaheadList + '" — not found in selectTypeaheadItem()');
+        let lastValidRoot = document.body;
+        try {
+            const typeahead = document.querySelector(SEL.picker.typeaheadList);
+            if (!typeahead) throw new Error('[CDP] Selector broken: "' + SEL.picker.typeaheadList + '" \u2014 not found in selectTypeaheadItem()');
             if(typeof lastValidRoot !== 'undefined') lastValidRoot = typeahead;
 
-        const items = typeahead.children;
-        if (${Number(index)} >= items.length) throw new Error('[CDP] Typeahead index ${index} out of range. Only ' + items.length + ' items.');
+            const items = typeahead.children;
+            if (${Number(index)} >= items.length) throw new Error('[CDP] Typeahead index ${index} out of range. Only ' + items.length + ' items.');
 
-        items[${Number(index)}].click();
-        await new Promise(r => setTimeout(r, 500));
+            items[${Number(index)}].click();
+            await new Promise(r => setTimeout(r, 500));
 
-        return { ok: true };
+            return { ok: true };
+        } catch(e) {
+            return { error: e.message, domDump: document.body.innerHTML, lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML : '' };
+        }
     })()`;
 
-    return await runCdpScript(cdp, EXP, 'selectTypeaheadItem');
+    return await runCdpScript(cdp, EXPRESSION, 'selectTypeaheadItem');
 }
 
 /**
@@ -1198,18 +1198,10 @@ export async function selectWorkflowItem(cdp, domIndex) {
             document.execCommand("delete", false, null);
             await new Promise(r => setTimeout(r, 100));
             document.execCommand("insertText", false, "/");
-            await new Promise(r => setTimeout(r, 1000));
-            
-            const dialogs = Array.from(document.querySelectorAll(SEL.picker.dialog));
-            if (dialogs.length === 0) throw new Error('[CDP] Dialog did not reappear');
-            const dialog = dialogs[dialogs.length - 1];
-            
-            const categoryBtns = dialog.querySelectorAll('.flex.items-center.justify-start.gap-2');
-            if (categoryBtns[2]) categoryBtns[2].click();
             
             // Wait for overlays
-            for (let i = 0; i < 6; i++) {
-                await new Promise(r => setTimeout(r, 400));
+            for (let i = 0; i < 15; i++) {
+                await new Promise(r => setTimeout(r, 200));
                 workflowList = document.querySelector(SEL.picker.workflowList);
                 if (workflowList && workflowList.children.length > 0) break;
             }
@@ -1231,7 +1223,7 @@ export async function selectWorkflowItem(cdp, domIndex) {
         return { ok: true };
     })()`;
 
-    return await runCdpScript(cdp, EXP, 'selectWorkflowItem');
+    return await runCdpScript(cdp, EXPRESSION, 'selectWorkflowItem');
 }
 
 /**

@@ -29,52 +29,80 @@ window._replayLastTTS = () => {
     if (_lastFinalMessageText) playTTS(_lastFinalMessageText);
 };
 
+let _ttsQueue = [];
+let _ttsIsPlaying = false;
+let _ttsDebugToast = null;
+
 /**
- * Read text using Web Speech API TTS
+ * Read text using Server-Side TTS API
  */
-function playTTS(text) {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
+async function playTTS(text) {
+    _lastFinalMessageText = text;
     
-    // Clean markdown before speaking
-    const cleanText = text
-        .replace(/```[\s\S]*?```/g, 'Bloc de code.')
-        .replace(/`([^`]+)`/g, '$1')
-        .replace(/[#*_-]/g, '')
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        .replace(/\]\]/g, '')
-        .replace(/\[\[/g, '');
+    const audioEl = document.getElementById('ttsAudio');
+    if (audioEl) {
+        audioEl.pause();
+        audioEl.currentTime = 0;
+    }
+    _ttsQueue = [];
+    _ttsIsPlaying = false;
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.volume = 1;
-    utterance.lang = 'fr-FR'; // Force language
-    
-    const voices = window.speechSynthesis.getVoices();
-    const frVoice = voices.find(v => v.lang.startsWith('fr'));
-    if (frVoice) utterance.voice = frVoice;
+    if (_ttsDebugToast && _ttsDebugToast.parentNode) _ttsDebugToast.remove();
+    _ttsDebugToast = document.createElement('div');
+    _ttsDebugToast.textContent = '🔊 Lecture TTS en cours...';
+    _ttsDebugToast.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:8px 16px;border-radius:20px;z-index:9999;font-size:12px;pointer-events:none;';
+    document.body.appendChild(_ttsDebugToast);
 
-    // Mobile hack: resume to unlock engine
-    if (window.speechSynthesis.resume) window.speechSynthesis.resume();
+    try {
+        const res = await fetchWithAuth('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text })
+        });
+        const data = await res.json();
+        
+        if (data.urls && data.urls.length > 0) {
+            _ttsQueue = data.urls;
+            playNextTTSChunk();
+        } else {
+            if (_ttsDebugToast && _ttsDebugToast.parentNode) _ttsDebugToast.remove();
+        }
+    } catch (e) {
+        console.error('TTS Fetch Error', e);
+        if (_ttsDebugToast) {
+            _ttsDebugToast.textContent = "🔊 TTS Error: " + e.message;
+            setTimeout(() => { if (_ttsDebugToast && _ttsDebugToast.parentNode) _ttsDebugToast.remove(); }, 3000);
+        }
+    }
+}
+
+function playNextTTSChunk() {
+    if (_ttsQueue.length === 0) {
+        _ttsIsPlaying = false;
+        if (_ttsDebugToast && _ttsDebugToast.parentNode) _ttsDebugToast.remove();
+        return;
+    }
     
-    window.speechSynthesis.speak(utterance);
+    _ttsIsPlaying = true;
+    const url = _ttsQueue.shift();
+    const audioEl = document.getElementById('ttsAudio');
+    if (!audioEl) return;
     
-    // Visual debug toast to confirm playTTS was called
-    const debugToast = document.createElement('div');
-    debugToast.textContent = '🔊 Lecture TTS en cours...';
-    debugToast.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:8px 16px;border-radius:20px;z-index:9999;font-size:12px;pointer-events:none;';
-    document.body.appendChild(debugToast);
-    
-    utterance.onend = () => {
-        if (debugToast.parentNode) debugToast.remove();
+    audioEl.src = url;
+    audioEl.onended = () => {
+        playNextTTSChunk();
     };
-    utterance.onerror = (e) => {
-        debugToast.textContent = "🔊 TTS Error: " + (e.error || e.type);
-        setTimeout(() => { if (debugToast.parentNode) debugToast.remove(); }, 3000);
-        console.error("TTS Error", e);
+    audioEl.onerror = () => {
+        console.error('TTS Audio Playback Error');
+        playNextTTSChunk();
     };
     
-    // Failsafe removal
-    setTimeout(() => { if (debugToast.parentNode) debugToast.remove(); }, 8000);
+    audioEl.play().catch(e => {
+        console.error('Autoplay prevented:', e);
+        _ttsIsPlaying = false;
+        _ttsQueue = [];
+        if (_ttsDebugToast && _ttsDebugToast.parentNode) _ttsDebugToast.remove();
+    });
 }
 
 /**
@@ -82,16 +110,13 @@ function playTTS(text) {
  */
 let _ttsWarmedUp = false;
 function warmupTTS() {
-    if (!_ttsWarmedUp && window.speechSynthesis) {
-        const u = new SpeechSynthesisUtterance('');
-        u.volume = 0;
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(u);
-        // Hack: pause right after speaking so an utterance stays in the queue
-        setTimeout(() => {
-            if (window.speechSynthesis.pause) window.speechSynthesis.pause();
-        }, 50);
-        _ttsWarmedUp = true;
+    if (!_ttsWarmedUp) {
+        const audioEl = document.getElementById('ttsAudio');
+        if (audioEl) {
+            audioEl.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+            audioEl.play().catch(()=>{});
+            _ttsWarmedUp = true;
+        }
     }
 }
 
@@ -478,8 +503,15 @@ async function init() {
         _isTtsEnabled = !_isTtsEnabled;
         localStorage.setItem('antigravity_tts', _isTtsEnabled);
         updateTtsUI();
-        if (!_isTtsEnabled && window.speechSynthesis) {
-            window.speechSynthesis.cancel();
+        if (!_isTtsEnabled) {
+            const audioEl = document.getElementById('ttsAudio');
+            if (audioEl) {
+                audioEl.pause();
+                audioEl.currentTime = 0;
+            }
+            _ttsQueue = [];
+            _ttsIsPlaying = false;
+            if (_ttsDebugToast && _ttsDebugToast.parentNode) _ttsDebugToast.remove();
         }
     });
 

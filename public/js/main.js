@@ -383,6 +383,33 @@ async function init() {
     document.getElementById('refreshBtn')?.addEventListener('click', () => {
         window.location.reload(true);
     });
+
+    // Screenshot button
+    document.getElementById('screenshotBtn')?.addEventListener('click', async () => {
+        const viewer = document.getElementById('screenshotViewer');
+        const body = document.getElementById('screenshotViewerBody');
+        if (!viewer || !body) return;
+
+        // Show overlay with loading state
+        body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Capturing screenshot...</p></div>';
+        viewer.classList.add('show');
+
+        try {
+            const res = await fetchWithAuth('/api/screenshot');
+            const data = await res.json();
+            if (data.data) {
+                body.innerHTML = `<img src="${data.data}" alt="Agent Manager Screenshot" />`;
+            } else {
+                body.innerHTML = '<div class="loading-state"><p>❌ ' + (data.error || 'Screenshot failed') + '</p></div>';
+            }
+        } catch (e) {
+            body.innerHTML = '<div class="loading-state"><p>❌ ' + e.message + '</p></div>';
+        }
+    });
+
+    document.getElementById('screenshotViewerClose')?.addEventListener('click', () => {
+        document.getElementById('screenshotViewer')?.classList.remove('show');
+    });
     
     // Remote Scroll controls (Touch & Wheel)
     let lastScrollY = 0;

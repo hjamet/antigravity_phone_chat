@@ -396,6 +396,22 @@ export function setupRoutes(app, {
         res.json(result);
     });
 
+    // --- Screenshot ---
+
+    router.get('/api/screenshot', async (req, res) => {
+        if (!cdpConnections.manager) return res.status(503).json({ error: 'Agent Manager not connected' });
+        try {
+            const result = await cdpConnections.manager.call('Page.captureScreenshot', { format: 'png' });
+            if (result && result.data) {
+                res.json({ data: `data:image/png;base64,${result.data}` });
+            } else {
+                res.status(500).json({ error: 'Screenshot capture returned no data' });
+            }
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     // --- Artifacts ---
 
     router.get('/api/artifacts', async (req, res) => {

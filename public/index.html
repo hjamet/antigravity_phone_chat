@@ -42,6 +42,13 @@
                 <span id="headerTitle">Antigravity Connect</span>
             </h1>
             <div class="header-controls">
+                <!-- Screenshot button -->
+                <button class="screenshot-btn" id="screenshotBtn" aria-label="Screenshot" title="Capture Agent Manager">
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                        <circle cx="12" cy="13" r="4"/>
+                    </svg>
+                </button>
                 <!-- Keep existing controls -->
                 <button class="new-chat-btn" id="newChatBtn" aria-label="New Chat" title="New Chat (Ctrl+Shift+L)">
                     <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
@@ -276,6 +283,25 @@
             <button class="artifact-proceed-btn" id="artifactProceedBtn" style="display:none;">Proceed</button>
         </div>
         <div class="artifact-viewer-body" id="artifactViewerContent">
+        </div>
+    </div>
+
+    <!-- Screenshot Viewer (Fullscreen Overlay) -->
+    <div class="screenshot-viewer" id="screenshotViewer">
+        <div class="screenshot-viewer-header">
+            <button class="icon-btn" id="screenshotViewerClose" aria-label="Close">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+            </button>
+            <span>Agent Manager Screenshot</span>
+            <div style="width: 24px;"></div>
+        </div>
+        <div class="screenshot-viewer-body" id="screenshotViewerBody">
+            <div class="loading-state">
+                <div class="loading-spinner"></div>
+                <p>Capturing screenshot...</p>
+            </div>
         </div>
     </div>
 

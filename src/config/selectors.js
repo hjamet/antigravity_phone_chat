@@ -9,7 +9,7 @@ export const SELECTORS = {
         workspaceItemPath: 'span.text-xs.opacity-50'       // Le span contenant le chemin local/remote
     },
     chat: {
-        scrollContainer: '[class*="overflow-y"]',
+        scrollContainer: '[class*="scrollbar-hide"][class*="overflow-y"]',
         turnsContainer: '[class*="flex"][class*="flex-col"][class*="gap-y"]',
         streamingIndicator: '[class*="progress_activity"],[class*="animate-spin"],[class*="animate-pulse"]'
     },
@@ -35,7 +35,7 @@ export const SELECTORS = {
 
     // ---- Control elements (input area below chat) ----
     controls: {
-        inputBox: 'body',
+        inputBox: '#antigravity\\.agentSidePanelInputBox',
         editor: '[contenteditable="true"][role="textbox"]',
         controlsRow: '.mt-1.flex.w-full.items-center.justify-between',           // Row holding mode/model buttons
         modeButton: 'button.py-1.pl-1.pr-2.flex.items-center',                   // Mode toggle (Fast/Planning)
@@ -44,6 +44,8 @@ export const SELECTORS = {
         cancelButton: '[data-tooltip-id="input-send-button-cancel-tooltip"]',     // Cancel active generation
         submitButton: '[data-tooltip-id^="input-send-button"]:not([data-tooltip-id*="cancel"])', // Submit (send or pending), NOT cancel
         audioButton: '[data-tooltip-id="audio-tooltip"]',                         // Mic button
+        retryButton: '#antigravity\\.agentSidePanelInputBox footer button.bg-ide-button-background', // Retry button when agent fails
+        errorMessage: '.text-sm.font-medium'                                     // "Agent terminated due to error"
     },
 
     // ---- Dropdowns / popover dialogs (mode & model pickers) ----

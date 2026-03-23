@@ -7,6 +7,16 @@ import { SELECTORS } from '../config/selectors.js';
 
 import fs from 'fs';
 import path from 'path';
+import { processSelectorError } from './selector_error.js';
+
+let selectorErrorHandler = null;
+
+/**
+ * Configure un handler pour les erreurs de sélecteur CDP.
+ */
+export function onSelectorError(handler) {
+    selectorErrorHandler = handler;
+}
 
 /**
  * Exécute un script CDP et gère les dumps DOM en cas d'erreur de sélecteur.
@@ -26,21 +36,22 @@ async function runCdpScript(cdp, expression, functionName = 'Unknown') {
             if (res.result?.value) {
                 const val = res.result.value;
                 if (val.error && val.domDump) {
-                    const dumpDir = path.join(process.cwd(), 'debug');
-                    if (!fs.existsSync(dumpDir)) fs.mkdirSync(dumpDir, { recursive: true });
-                    const dumpPath = path.join(dumpDir, 'crash_dom.html');
-                    fs.writeFileSync(dumpPath, val.domDump, 'utf8');
+                    const errorReport = processSelectorError(val, functionName);
                     
                     console.error(`
 ❌ [CRASH SILENCIEUX ÉVITÉ] Erreur CDP dans la fonction: ${functionName}()`);
-                    console.error(`   Message: ${val.error}`);
-                    if (val.lastValidRoot) {
+                    console.error(`   Message: ${errorReport.error}`);
+                    if (errorReport.lastValidRoot) {
                         console.error(`   Dernière racine commune trouvée (Extrait):
-     ${val.lastValidRoot.trim()}`);
+     ${errorReport.lastValidRoot.trim()}`);
                     }
                     console.error(`
-   👉 Fichier DOM complet généré pour consultation : ${dumpPath}
+   👉 Fichier DOM complet généré : ${errorReport.domFilePath}
 `);
+                    
+                    if (selectorErrorHandler) {
+                        selectorErrorHandler(errorReport);
+                    }
                     
                     delete val.domDump;
                     delete val.lastValidRoot;
@@ -231,7 +242,34 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
             } catch(e) { /* sidebar not open, ignore */ }
 
             const isStreaming = wrapper ? !!wrapper.querySelector(SEL.chat.streamingIndicator) : false;
-            return { messages: collected, isFull: false, isStreaming, availableArtifacts, scrollInfo: { scrollTop: chatScroll.scrollTop, scrollHeight, clientHeight } };
+
+            // --- Auto-Retry Logic ---
+            let retryDetected = false;
+            const retryBtn = document.querySelector(SEL.controls.retryButton);
+            const errorMsg = document.querySelector(SEL.controls.errorMessage);
+            
+            if (retryBtn && errorMsg && (errorMsg.innerText || '').includes('Agent terminated due to error')) {
+                retryDetected = true;
+                const delay = Math.floor(Math.random() * 2000);
+                console.log(\`[CDP] Error detected: "Agent terminated due to error". auto-clicking Retry in \${delay}ms...\`);
+                
+                // We use a non-blocking timeout within the browser context
+                setTimeout(() => {
+                    if (document.contains(retryBtn)) {
+                        retryBtn.click();
+                        console.log('[CDP] Auto-clicked Retry button.');
+                    }
+                }, delay);
+            }
+
+            return { 
+                messages: collected, 
+                isFull: false, 
+                isStreaming, 
+                availableArtifacts, 
+                retryInfo: { detected: retryDetected },
+                scrollInfo: { scrollTop: chatScroll.scrollTop, scrollHeight, clientHeight } 
+            };
         } catch(e) {     return {         error: e.toString() ,         domDump: document.documentElement ? document.documentElement.outerHTML : '',        lastValidRoot: typeof lastValidRoot !== 'undefined' && lastValidRoot ? lastValidRoot.outerHTML.substring(0, 600) : ''    }; }
     })()`;
     const val = await runCdpScript(cdp, CAPTURE_SCRIPT, 'captureSnapshot');
@@ -1450,4 +1488,48 @@ export async function proceedArtifact(cdp) {
     })()`;
 
     return await runCdpScript(cdp, EXP, 'proceedArtifact');
+}
+
+/**
+ * Manually trigger the retry button if present (exposed utility)
+ */
+export async function manualRetry(cdp) {
+    if (!cdp) return { error: 'Not connected' };
+    const EXP = `(async () => {
+        const SEL = ${JSON.stringify(SELECTORS)};
+        try {
+            const retryBtn = document.querySelector(SEL.controls.retryButton);
+            if (retryBtn && retryBtn.offsetParent !== null) {
+                retryBtn.click();
+                return { success: true };
+            }
+            return { error: 'Retry button not found' };
+        } catch(e) { return { error: e.toString() }; }
+    })()`;
+    return await runCdpScript(cdp, EXP, 'manualRetry');
+}
+
+/**
+ * Automatically clicks the retry button if present, with a delay and retry mechanism.
+ * This is intended to be called within other CDP scripts (e.g., captureSnapshot)
+ * to handle transient UI states where a retry button might appear.
+ * @param {Object} cdp CDP connection
+ * @param {number} [retries=3] Number of times to check for the button
+ * @param {number} [delayMs=1000] Delay between retries in milliseconds
+ */
+export async function autoClickRetry(cdp, retries = 3, delayMs = 1000) {
+    if (!cdp) return { error: 'Not connected' };
+    const EXP = `(async (retries, delayMs) => {
+        const SEL = ${JSON.stringify(SELECTORS)};
+        for (let i = 0; i < retries; i++) {
+            const retryBtn = document.querySelector(SEL.controls.retryButton);
+            if (retryBtn && retryBtn.offsetParent !== null) {
+                retryBtn.click();
+                return { success: true, message: 'Retry button clicked' };
+            }
+            await new Promise(r => setTimeout(r, delayMs));
+        }
+        return { success: false, message: 'Retry button not found after multiple attempts' };
+    })(${retries}, ${delayMs})`;
+    return await runCdpScript(cdp, EXP, 'autoClickRetry');
 }

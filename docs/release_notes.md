@@ -4,6 +4,20 @@ All notable changes to **Antigravity Phone Connect** are documented here, in rev
 
 ---
 
+## v0.2.30 - Diagnostic & Proactive Debugging 🛠️
+**Release Date:** March 23, 2026
+
+---
+
+### 🛠️ CDP Selector Diagnostics
+- **Streamlit-Style Error Banner**: Introduced a high-visibility error surface that appears when a CDP selector fails.
+- **LLM-Ready Reporting**: One-click "Copy LLM Report" button generates a perfectly structured prompt with the failed selector, function source, and DOM context.
+- **Automatic Polling Pause**: The server now intelligently pauses all polling activity when an error is detected to prevent log spam and save resources.
+- **DOM Crash Snapshots**: Automatically saves the full DOM to `debug/crash_dom.html` for deep inspection.
+- **Manual Resume**: Added a "Resume Polling" action in the web UI once the issue is acknowledged or fixed.
+
+---
+
 ## v0.2.28 - UI/UX Pro Max & The Obsidian Overhaul 💎
 **Release Date:** February 27, 2026
 

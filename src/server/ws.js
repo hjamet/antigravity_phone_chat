@@ -71,5 +71,19 @@ export function setupWebSocket(wss, {
         });
     }
 
-    return { broadcastUpdate };
+    /**
+     * Broadcast a selector error to all connected clients
+     */
+    function broadcastSelectorError(report) {
+        wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                    type: 'selector_error',
+                    data: report
+                }));
+            }
+        });
+    }
+
+    return { broadcastUpdate, broadcastSelectorError };
 }

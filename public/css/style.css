@@ -1987,3 +1987,187 @@ textarea::-webkit-scrollbar {
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+/* --- Selector Error Banner (Streamlit-like) --- */
+.selector-error-banner {
+    position: fixed;
+    top: -100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 95%;
+    max-width: 800px;
+    background: #1e1e2e;
+    border: 1px solid #f38ba8;
+    border-radius: 12px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 20px rgba(243, 139, 168, 0.2);
+    z-index: 9999;
+    transition: top 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    overflow: hidden;
+    color: #cdd6f4;
+    font-family: 'Inter', sans-serif;
+}
+
+.selector-error-banner.show {
+    top: 20px;
+}
+
+.error-header {
+    background: #f38ba8;
+    color: #11111b;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.error-title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.error-icon {
+    font-size: 1.2rem;
+}
+
+.error-title {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.9rem;
+}
+
+.error-close {
+    background: rgba(0, 0, 0, 0.1);
+    border: none;
+    color: inherit;
+    font-size: 1.2rem;
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.error-close:hover {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.error-body {
+    padding: 20px;
+}
+
+.error-main-info {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+@media (min-width: 600px) {
+    .error-main-info {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.info-item {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.info-item .label {
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: #a6adc8;
+    margin-bottom: 4px;
+}
+
+.info-item .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    color: #f38ba8;
+    word-break: break-all;
+}
+
+.error-dom-info {
+    margin-bottom: 24px;
+}
+
+.error-dom-info strong {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+    color: #bac2de;
+}
+
+.error-dom-info pre {
+    background: #11111b;
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    max-height: 200px;
+}
+
+.error-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.error-btn {
+    flex: 1;
+    min-width: 140px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s;
+    border: none;
+    text-decoration: none;
+}
+
+.error-btn.primary {
+    background: #89b4fa;
+    color: #11111b;
+}
+
+.error-btn.primary:hover {
+    background: #b4befe;
+    transform: translateY(-2px);
+}
+
+.error-btn.secondary {
+    background: rgba(255, 255, 255, 0.08);
+    color: #cdd6f4;
+}
+
+.error-btn.secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.error-btn.success {
+    background: #a6e3a1;
+    color: #11111b;
+}
+
+.error-btn.success:hover {
+    background: #94e2d5;
+    transform: translateY(-2px);
+}
+
+.error-btn.copied {
+    background: #94e2d5 !important;
+}

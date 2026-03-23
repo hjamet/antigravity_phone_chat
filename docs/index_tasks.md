@@ -27,3 +27,4 @@
 | [Fix Workflow Selection](tasks/fix-workflow-selection.md) | Synchronisation du clic CDP et nettoyage auto du badge workflow | 2026-03-22 | `Up to date` |
 | [Fix Erreur Syntaxe Démarrage](tasks/fix-startup-syntax-error.md) | Correction de la SyntaxError dans `ChatHistoryService.js` | 2026-03-22 | `Up to date` |
 | [Notifications OS Natives](tasks/add_native_notifications.md) | Ajout des notifications push au niveau de l'OS fin de génération | 2026-03-22 | `Up to date` |
+| [Diagnostic Erreur Sélecteur](tasks/cdp-selector-diagnostics.md) | Affichage Streamlit-like et rapport LLM-ready | 2026-03-23 | `Up to date` |

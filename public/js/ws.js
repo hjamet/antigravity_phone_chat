@@ -40,6 +40,8 @@ export function initWS(onMessage) {
                 if (data && !data.error) {
                     callbacks.forEach(cb => cb({ type: 'snapshot', data }));
                 }
+            } else if (message.type === 'selector_error') {
+                callbacks.forEach(cb => cb(message));
             } else {
                 // Pass through other message types (like 'snapshot' or 'state')
                 callbacks.forEach(cb => cb(message));

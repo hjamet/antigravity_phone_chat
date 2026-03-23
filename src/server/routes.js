@@ -16,6 +16,8 @@ export function setupRoutes(app, {
     workbenchCdp, 
     managerCdp, 
     inspectUI,
+    debugManagerDom,
+    selectorErrorState,
     __dirname 
 }) {
     const router = express.Router();
@@ -170,7 +172,6 @@ export function setupRoutes(app, {
         }
     });
 
-    // Debug DOM structure via UI Inspector
     router.get('/debug-dom', async (req, res) => {
         try {
             const result = await debugManagerDom(cdpConnections.manager);
@@ -178,6 +179,26 @@ export function setupRoutes(app, {
         } catch (e) {
             res.status(503).json({ error: e.message });
         }
+    });
+
+    // --- Selector Error Diagnostics ---
+
+    router.get('/api/selector-errors/dom', (req, res) => {
+        const dumpPath = join(process.cwd(), 'debug', 'crash_dom.html');
+        if (fs.existsSync(dumpPath)) {
+            res.sendFile(dumpPath);
+        } else {
+            res.status(404).json({ error: 'No DOM dump found' });
+        }
+    });
+
+    router.post('/api/selector-errors/reset', (req, res) => {
+        console.log('🔄 Selector error reset requested. Resuming polling.');
+        if (selectorErrorState) {
+            selectorErrorState.active = false;
+            selectorErrorState.report = null;
+        }
+        res.json({ success: true });
     });
 
     // ... End of route list ...

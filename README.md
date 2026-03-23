@@ -35,7 +35,9 @@ L'application agit comme un proxy intelligent :
 - **Extraction Intelli** : Capture des blocs tâches, réflexions et messages directes de l'agent.
 - **Artefacts & Commentaires** : Visualisation des artefacts Antigravity avec rendu markdown fidèle. Ajout de **commentaires contextuels rapides** (sélection de texte web instancie via CDP le visualiseur Lexical dans Agent Manager) en plus des boutons d'accès rapide.
 - **Smart Scrolling** : Scroll forcé dans l'Agent Manager (CDP). Interface web avec auto-scroll intelligent (seulement si en bas) et notification toast « ✅ Réponse reçue » à la fin du streaming.
+- **Diagnostic Erreur Sélecteur** : En cas de sélecteur cassé, une bannière "Streamlit-like" apparaît sur le web avec un rapport LLM-ready et un snapshot du DOM complet. Arrêt automatique du polling serveur sur erreur.
 - **PWA Installable** : L'application est installable sur Android (et tout navigateur compatible PWA) avec un manifest W3C, un Service Worker et une bannière d'installation personnalisée.
+- **Auto-Retry Agent** : Détection automatique des erreurs "Agent terminated due to error" et clic sur le bouton "Retry" après un délai aléatoire (0-2s) pour une reprise fluide sans intervention manuelle.
 
 ## 5. # Principaux résultats
 | Feature | État | Source de vérité |
@@ -46,6 +48,7 @@ L'application agit comme un proxy intelligent :
 | Mode/Model Sync | ✅ Stable | Agent Manager CDP |
 | Artifacts Viewer | ✅ Nouveau | Agent Manager CDP |
 | Smart Scrolling & Notifications | ✅ Nouveau | CDP + Frontend |
+| Selector Error Diagnostics | ✅ Nouveau | CDP + WebSocket |
 | PWA Installable | ✅ Nouveau | manifest.json + sw.js |
 
 ## 6. # Documentation Index
@@ -121,6 +124,8 @@ L'application agit comme un proxy intelligent :
 | 27 | **Notifications OS Natives** | ✅ Fait | [add_native_notifications.md](docs/tasks/add_native_notifications.md) |
 | 28 | **Améliorations UI & Bouton Proceed** | ✅ Fait | — |
 | 29 | **Fix Selectors Manager** | ✅ Fait | [fix-selectors-manager.md](docs/tasks/fix-selectors-manager.md) |
+| 30 | **Diagnostic Erreur Sélecteur** | ✅ Fait | [cdp-selector-diagnostics.md](docs/tasks/cdp-selector-diagnostics.md) |
+| 31 | **Auto-Retry Agent** | ✅ Fait | — |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

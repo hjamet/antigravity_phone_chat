@@ -39,6 +39,7 @@ let lastSnapshot = { data: null };
 let lastSnapshotHash = null;
 // Cache the last significant agent message (> 300 chars) to survive DOM virtualization
 let cachedAgentMsg = null;
+let selectorErrorState = { active: false, report: null };
 
 /**
  * Simple hash function for change detection
@@ -178,7 +179,6 @@ async function initCDP() {
     if (targets.manager && !cdpConnections.manager) {
         cdpConnections.manager = await connectCDP(targets.manager.url);
         console.log(`✅ Connected to Agent Manager on port ${targets.manager.port}`);
-        
         // Background initial capture
         setTimeout(async () => {
             const snap = await managerCdp.captureSnapshot(cdpConnections.manager, { fullScroll: false });
@@ -188,6 +188,18 @@ async function initCDP() {
                 lastSnapshotHash = hash;
             }
         }, 1000);
+    }
+
+    if (cdpConnections.manager) {
+        managerCdp.onSelectorError((report) => {
+            console.log('🛑 Selector error detected! Pausing polling.');
+            selectorErrorState.active = true;
+            selectorErrorState.report = report;
+            // Broadcast the error immediately to the frontend
+            if (global.wssInstance) {
+                global.wssInstance.broadcastSelectorError?.(report);
+            }
+        });
     }
 }
 
@@ -201,6 +213,12 @@ async function startPolling(wss) {
             if (mgDead) cdpConnections.manager = null;
             try { await initCDP(); } catch (e) {}
             if (!cdpConnections.workbench) { setTimeout(poll, 2000); return; }
+        }
+
+        if (selectorErrorState.active) {
+            // Polling is paused because of a selector error
+            setTimeout(poll, POLL_INTERVAL);
+            return;
         }
 
         if (cdpConnections.manager) {
@@ -244,6 +262,7 @@ async function createServer() {
         : http.createServer(app);
 
     const wss = new WebSocketServer({ server });
+    global.wssInstance = wss;
     AUTH_TOKEN = hashString(APP_PASSWORD + (process.env.AUTH_SALT || 'antigravity_default_salt_99'));
 
     app.use(compression());
@@ -304,6 +323,7 @@ async function createServer() {
         managerCdp,
         inspectUI,
         debugManagerDom,
+        selectorErrorState,
         __dirname
     });
 

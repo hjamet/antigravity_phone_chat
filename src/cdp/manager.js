@@ -221,25 +221,37 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
 
             // Extract available artifacts from sidebar (if visible)
             let availableArtifacts = [];
+            let artHeader = null;
             try {
-                const allDivs = Array.from(document.querySelectorAll('div'));
-                const artHeader = allDivs.find(d => {
-                    const ownText = Array.from(d.childNodes)
-                        .filter(n => n.nodeType === 3)
-                        .map(n => n.textContent.trim())
-                        .join(' ');
-                    return ownText === 'Artifacts' && d.offsetParent !== null;
-                });
+                artHeader = Array.from(document.querySelectorAll(SEL.artifacts.sectionHeader))
+                    .find(el => (el.innerText || '').trim() === 'Artifacts' && el.offsetParent !== null);
                 if (artHeader) {
-                    const headerRow = artHeader.parentElement;
-                    const ul = headerRow?.nextElementSibling;
-                    if (ul && ul.tagName === 'UL') {
-                        availableArtifacts = Array.from(ul.querySelectorAll('li'))
-                            .filter(li => li.offsetParent !== null && li.innerText?.trim().length > 1)
-                            .map(li => li.innerText.trim());
+                    const container = artHeader.closest('.flex.flex-col') || artHeader.parentElement?.parentElement;
+                    if (container) {
+                        const ul = container.querySelector('ul');
+                        if (ul) {
+                            availableArtifacts = Array.from(ul.querySelectorAll('li'))
+                                .filter(li => li.offsetParent !== null && (li.innerText || '').trim().length > 1)
+                                .map(li => (li.innerText || '').trim());
+                        }
                     }
                 }
             } catch(e) { /* sidebar not open, ignore */ }
+
+            // Auto-open sidebar if chat is active but artifacts panel not found
+            if (!artHeader && chatScroll) {
+                try {
+                    const toggleBtn = document.querySelector(SEL.artifacts.toggleSidebar);
+                    if (toggleBtn && toggleBtn.offsetParent !== null) {
+                        const rect = toggleBtn.getBoundingClientRect();
+                        const x = rect.left + rect.width / 2;
+                        const y = rect.top + rect.height / 2;
+                        ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type => {
+                            toggleBtn.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }));
+                        });
+                    }
+                } catch(e) { }
+            }
 
             const isStreaming = wrapper ? !!wrapper.querySelector(SEL.chat.streamingIndicator) : false;
 
@@ -368,7 +380,6 @@ export async function getAvailableModels(cdp) {
  */
 export async function injectMessage(cdp, text) {
     if (!cdp) throw new Error("Not connected to Manager CDP");
-            if(typeof lastValidRoot !== 'undefined') lastValidRoot = cdp;
     const safeText = JSON.stringify(text);
 
     const EXPRESSION = `(async () => {
@@ -385,27 +396,55 @@ export async function injectMessage(cdp, text) {
 
             const textToInsert = ${safeText};
 
+            // Focus and clear existing content
             editor.focus();
-            document.execCommand?.("selectAll", false, null);
-            document.execCommand?.("delete", false, null);
+            document.execCommand("selectAll", false, null);
+            document.execCommand("delete", false, null);
 
-            const lines = textToInsert.split('\
-');
-            for(let i=0; i<lines.length; i++) {
-                if (lines[i].length > 0) {
-                    const ok = document.execCommand("insertText", false, lines[i]);
-                    if (!ok) throw new Error('[CDP] execCommand("insertText") failed in injectMessage(). Update text insertion strategy.');
-            if(typeof lastValidRoot !== 'undefined') lastValidRoot = ok;
+            // Strategy 1: Single insertText for the entire message
+            // This avoids the line-by-line loop that caused partial sends
+            let inserted = false;
+            try {
+                const ok = document.execCommand("insertText", false, textToInsert);
+                if (ok && (editor.textContent || '').length >= Math.min(textToInsert.length, 20)) {
+                    inserted = true;
                 }
-                if (i < lines.length - 1) document.execCommand("insertLineBreak");
+            } catch(e) { /* execCommand may throw in some contexts */ }
+
+            // Strategy 2: Clipboard paste simulation fallback
+            if (!inserted) {
+                try {
+                    const dt = new DataTransfer();
+                    dt.setData('text/plain', textToInsert);
+                    const pasteEvt = new ClipboardEvent('paste', {
+                        bubbles: true,
+                        cancelable: true,
+                        clipboardData: dt
+                    });
+                    editor.dispatchEvent(pasteEvt);
+                    await new Promise(r => setTimeout(r, 100));
+                    if ((editor.textContent || '').length >= Math.min(textToInsert.length, 20)) {
+                        inserted = true;
+                    }
+                } catch(e) { /* paste fallback failed */ }
             }
-            // Allow React to process the editor state change before clicking submit
-            await new Promise(r => setTimeout(r, 150));
+
+            // Strategy 3: Direct DOM manipulation + React input event
+            if (!inserted) {
+                editor.textContent = '';
+                const textNode = document.createTextNode(textToInsert);
+                editor.appendChild(textNode);
+                editor.dispatchEvent(new Event('input', { bubbles: true }));
+                editor.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, inputType: 'insertText', data: textToInsert }));
+            }
+
+            // Wait for React to process the editor state change before clicking submit
+            await new Promise(r => setTimeout(r, 300));
 
             const submitBtn = document.querySelector(SEL.controls.submitButton);
             if (submitBtn) {
                 submitBtn.click();
-                return { ok:true, method:"button_click" };
+                return { ok:true, method: inserted ? "execCommand_single" : "dom_fallback" };
             }
 
             // Fallback to Enter key simulation (if button not found for some reason)

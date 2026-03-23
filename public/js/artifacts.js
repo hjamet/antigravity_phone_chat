@@ -1,6 +1,7 @@
 /**
  * Artifacts Module
  * Handles listing artifacts, viewing their markdown content, and adding comments via CDP.
+ * Comments are shown as persistent yellow highlights in the viewer content.
  */
 
 import { fetchWithAuth } from './api.js?v=10';
@@ -87,6 +88,9 @@ export async function openArtifactViewer(name) {
             }
         }
 
+        // Re-apply any existing highlights for this artifact
+        reapplyHighlights();
+
         // Update header info
         const proceedBtn = document.getElementById('artifactProceedBtn');
         if (proceedBtn) {
@@ -104,13 +108,15 @@ export function closeArtifactViewer() {
     const viewer = document.getElementById('artifactViewer');
     if (viewer) viewer.classList.remove('open');
     currentArtifact = null;
+    closeReviewPopover();
 }
 
 /**
  * Pending comments waiting to be sent
- * @type {Array<{artifact: string, selectedText: string|null, comment: string}>}
+ * @type {Array<{artifact: string, selectedText: string|null, comment: string, idx: number}>}
  */
 let draftComments = [];
+let _commentIdx = 0;
 
 /**
  * Returns all drafted comments formatted as XML and clears the draft list.
@@ -131,8 +137,18 @@ export function flushDraftComments() {
         xml += `</artifact_comment>\n\n`;
     });
     
+    // Clear drafts and highlights
     draftComments = [];
+    clearAllHighlights();
+    updateBadge();
     return xml.trim();
+}
+
+/**
+ * Get draft comment count for external use.
+ */
+export function getDraftCommentCount() {
+    return draftComments.length;
 }
 
 /**
@@ -158,16 +174,27 @@ export async function submitArtifactComment(selectedText = null, commentText = n
 
     if (!commentText || !currentArtifact) return false;
 
+    const idx = _commentIdx++;
+
     // Push to drafts
     draftComments.push({
         artifact: currentArtifact,
         selectedText: isContextual ? selectedText : null,
-        comment: commentText
+        comment: commentText,
+        idx
     });
 
     if (!isContextual && textarea) textarea.value = '';
     
-    // Provide visual feedback
+    // Add visual highlight if contextual
+    if (isContextual && selectedText) {
+        highlightSelection(selectedText, commentText, idx);
+    }
+
+    // Update badge
+    updateBadge();
+
+    // Provide visual feedback for global comments
     if (btn && !isContextual) {
         const originalText = btn.textContent;
         btn.textContent = '✓ Saved in draft';
@@ -180,6 +207,258 @@ export async function submitArtifactComment(selectedText = null, commentText = n
 
     return true;
 }
+
+// ========== HIGHLIGHT SYSTEM ==========
+
+/**
+ * Highlight the currently selected text in the artifact viewer content.
+ */
+function highlightSelection(selectedText, commentText, idx) {
+    const contentEl = document.getElementById('artifactViewerContent');
+    if (!contentEl) return;
+
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    const range = sel.getRangeAt(0);
+    
+    // Check range is inside the viewer
+    if (!contentEl.contains(range.commonAncestorContainer)) return;
+
+    try {
+        const mark = document.createElement('mark');
+        mark.className = 'artifact-comment-highlight';
+        mark.dataset.commentIdx = String(idx);
+        mark.title = commentText.length > 60 ? commentText.substring(0, 57) + '...' : commentText;
+        
+        range.surroundContents(mark);
+
+        // Attach click handler
+        mark.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showReviewPopover(mark, idx);
+        });
+    } catch (e) {
+        // surroundContents fails if range crosses element boundaries
+        // Fallback: just store the comment without visual highlight
+        console.warn('[Artifacts] Could not highlight across element boundaries, comment saved without visual mark.');
+    }
+
+    sel.removeAllRanges();
+}
+
+/**
+ * Re-apply highlights when re-opening the same artifact (if comments still exist).
+ * Since the DOM is replaced on open, we attempt text-based matching.
+ */
+function reapplyHighlights() {
+    const contentEl = document.getElementById('artifactViewerContent');
+    if (!contentEl || !currentArtifact) return;
+
+    const relevantDrafts = draftComments.filter(d => d.artifact === currentArtifact && d.selectedText);
+    
+    for (const draft of relevantDrafts) {
+        // Try to find and highlight the text in the DOM
+        const found = findAndWrapText(contentEl, draft.selectedText, draft.comment, draft.idx);
+        if (!found) {
+            console.warn(`[Artifacts] Could not re-highlight: "${draft.selectedText.substring(0, 30)}..."`);
+        }
+    }
+}
+
+/**
+ * Walk the DOM text nodes and wrap the first occurrence of `searchText`.
+ */
+function findAndWrapText(root, searchText, commentText, idx) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    let node;
+    
+    // Try finding in a single text node first
+    while ((node = walker.nextNode())) {
+        const pos = node.textContent.indexOf(searchText);
+        if (pos === -1) continue;
+        
+        const range = document.createRange();
+        range.setStart(node, pos);
+        range.setEnd(node, pos + searchText.length);
+        
+        const mark = document.createElement('mark');
+        mark.className = 'artifact-comment-highlight';
+        mark.dataset.commentIdx = String(idx);
+        mark.title = commentText.length > 60 ? commentText.substring(0, 57) + '...' : commentText;
+        
+        try {
+            range.surroundContents(mark);
+            mark.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showReviewPopover(mark, idx);
+            });
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+    return false;
+}
+
+/**
+ * Remove all highlights from the viewer content.
+ */
+function clearAllHighlights() {
+    const contentEl = document.getElementById('artifactViewerContent');
+    if (!contentEl) return;
+    
+    contentEl.querySelectorAll('.artifact-comment-highlight').forEach(mark => {
+        const parent = mark.parentNode;
+        while (mark.firstChild) {
+            parent.insertBefore(mark.firstChild, mark);
+        }
+        parent.removeChild(mark);
+        parent.normalize();
+    });
+}
+
+/**
+ * Update the comment count badge.
+ */
+function updateBadge() {
+    const badge = document.getElementById('commentCountBadge');
+    if (!badge) return;
+    
+    const count = draftComments.length;
+    badge.textContent = String(count);
+    badge.style.display = count > 0 ? 'inline-flex' : 'none';
+}
+
+// ========== REVIEW POPOVER ==========
+
+/**
+ * Show a review popover on a highlighted comment.
+ */
+function showReviewPopover(markEl, idx) {
+    closeReviewPopover();
+
+    const draft = draftComments.find(d => d.idx === idx);
+    if (!draft) return;
+
+    const popover = document.createElement('div');
+    popover.id = 'commentReviewPopover';
+    popover.className = 'comment-review-popover';
+
+    const quoteText = draft.selectedText
+        ? (draft.selectedText.length > 80 ? draft.selectedText.substring(0, 77) + '...' : draft.selectedText)
+        : '';
+
+    popover.innerHTML = `
+        ${quoteText ? `<div class="crp-quote">"${escapeHtml(quoteText)}"</div>` : ''}
+        <div class="crp-comment">${escapeHtml(draft.comment)}</div>
+        <div class="crp-actions">
+            <button class="crp-btn edit">Edit</button>
+            <button class="crp-btn delete">Delete</button>
+        </div>
+    `;
+
+    // Position near the mark
+    const rect = markEl.getBoundingClientRect();
+    document.body.appendChild(popover);
+    
+    popover.style.top = (rect.bottom + window.scrollY + 8) + 'px';
+    popover.style.left = Math.max(10, Math.min(
+        rect.left + window.scrollX,
+        window.innerWidth - 300
+    )) + 'px';
+
+    // Edit button
+    popover.querySelector('.crp-btn.edit').onclick = (e) => {
+        e.stopPropagation();
+        showEditMode(popover, draft, markEl);
+    };
+
+    // Delete button
+    popover.querySelector('.crp-btn.delete').onclick = (e) => {
+        e.stopPropagation();
+        deleteComment(idx, markEl);
+        closeReviewPopover();
+    };
+
+    // Close on outside click (delayed to avoid immediate close)
+    setTimeout(() => {
+        const closeHandler = (ev) => {
+            if (!popover.contains(ev.target) && ev.target !== markEl) {
+                closeReviewPopover();
+                document.removeEventListener('mousedown', closeHandler);
+                document.removeEventListener('touchstart', closeHandler);
+            }
+        };
+        document.addEventListener('mousedown', closeHandler);
+        document.addEventListener('touchstart', closeHandler, { passive: true });
+    }, 50);
+}
+
+/**
+ * Switch the review popover to edit mode.
+ */
+function showEditMode(popover, draft, markEl) {
+    const quoteText = draft.selectedText
+        ? (draft.selectedText.length > 80 ? draft.selectedText.substring(0, 77) + '...' : draft.selectedText)
+        : '';
+
+    popover.innerHTML = `
+        ${quoteText ? `<div class="crp-quote">"${escapeHtml(quoteText)}"</div>` : ''}
+        <textarea class="crp-edit-input">${escapeHtml(draft.comment)}</textarea>
+        <div class="crp-actions">
+            <button class="crp-btn cancel-edit">Cancel</button>
+            <button class="crp-btn save">Save</button>
+        </div>
+    `;
+
+    const input = popover.querySelector('.crp-edit-input');
+    input.focus();
+
+    popover.querySelector('.crp-btn.cancel-edit').onclick = (e) => {
+        e.stopPropagation();
+        closeReviewPopover();
+    };
+
+    popover.querySelector('.crp-btn.save').onclick = (e) => {
+        e.stopPropagation();
+        const newText = input.value.trim();
+        if (newText) {
+            draft.comment = newText;
+            markEl.title = newText.length > 60 ? newText.substring(0, 57) + '...' : newText;
+        }
+        closeReviewPopover();
+    };
+}
+
+/**
+ * Delete a draft comment and remove its highlight.
+ */
+function deleteComment(idx, markEl) {
+    draftComments = draftComments.filter(d => d.idx !== idx);
+    
+    // Unwrap the mark element
+    if (markEl && markEl.parentNode) {
+        const parent = markEl.parentNode;
+        while (markEl.firstChild) {
+            parent.insertBefore(markEl.firstChild, markEl);
+        }
+        parent.removeChild(markEl);
+        parent.normalize();
+    }
+    
+    updateBadge();
+}
+
+/**
+ * Close any open review popover.
+ */
+function closeReviewPopover() {
+    const existing = document.getElementById('commentReviewPopover');
+    if (existing) existing.remove();
+}
+
+// ========== TEXT SELECTION HANDLER ==========
 
 /**
  * Handle text selection in the artifact viewer to show inline comment button
@@ -261,7 +540,6 @@ function handleTextSelection() {
             if (success) {
                 popover.style.display = 'none';
                 popover.classList.remove('expanded');
-                window.getSelection().removeAllRanges();
             } else {
                 submitBtn.textContent = 'Error';
                 setTimeout(() => { submitBtn.textContent = 'Save'; submitBtn.disabled = false; }, 2000);

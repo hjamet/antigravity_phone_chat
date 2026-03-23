@@ -10,7 +10,7 @@ import { loadHistory, startNewChat } from './history.js?v=10';
 import { loadProjects } from './projects.js?v=10';
 import { fetchWithAuth } from './api.js?v=10';
 import { initPicker, onTriggerChar, hidePicker, isPickerVisible, getWorkflowPrefix, clearWorkflow } from './picker.js?v=12';
-import { loadArtifacts, initArtifacts, flushDraftComments } from './artifacts.js?v=2';
+import { loadArtifacts, initArtifacts, flushDraftComments } from './artifacts.js?v=3';
 import { handleSelectorError } from './selectorError.js?v=1';
 
 /**

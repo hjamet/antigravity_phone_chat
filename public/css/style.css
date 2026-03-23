@@ -1989,6 +1989,126 @@ textarea::-webkit-scrollbar {
     cursor: not-allowed;
 }
 
+/* ===== Persistent Comment Highlights in Artifact Viewer ===== */
+.artifact-comment-highlight {
+    background: rgba(250, 204, 21, 0.18);
+    text-decoration: underline;
+    text-decoration-color: rgba(250, 204, 21, 0.6);
+    text-underline-offset: 2px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background 0.2s;
+    position: relative;
+}
+.artifact-comment-highlight:hover {
+    background: rgba(250, 204, 21, 0.32);
+}
+
+/* Comment Review Popover (click on highlight) */
+.comment-review-popover {
+    position: absolute;
+    z-index: 10000;
+    background: rgba(17, 17, 27, 0.97);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(250, 204, 21, 0.3);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 12px rgba(250, 204, 21, 0.1);
+    padding: 12px;
+    width: 280px;
+    animation: popoverFadeIn 0.2s ease-out forwards;
+}
+.comment-review-popover .crp-quote {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+    border-left: 2px solid rgba(250, 204, 21, 0.5);
+    padding: 4px 8px;
+    margin-bottom: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 0 4px 4px 0;
+}
+.comment-review-popover .crp-comment {
+    font-size: 13px;
+    color: var(--text-main);
+    margin-bottom: 10px;
+    line-height: 1.5;
+    word-break: break-word;
+}
+.comment-review-popover .crp-edit-input {
+    width: 100%;
+    min-height: 60px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 8px;
+    color: var(--text-main);
+    font-size: 13px;
+    resize: vertical;
+    outline: none;
+    font-family: inherit;
+    margin-bottom: 10px;
+}
+.comment-review-popover .crp-edit-input:focus {
+    border-color: rgba(250, 204, 21, 0.5);
+}
+.comment-review-popover .crp-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+.crp-btn {
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    font-family: inherit;
+    transition: all 0.2s;
+}
+.crp-btn.edit {
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+}
+.crp-btn.edit:hover {
+    background: rgba(139, 92, 246, 0.3);
+}
+.crp-btn.delete {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+}
+.crp-btn.delete:hover {
+    background: rgba(239, 68, 68, 0.25);
+}
+.crp-btn.save {
+    background: #8b5cf6;
+    color: white;
+}
+.crp-btn.save:hover {
+    background: #7c3aed;
+}
+.crp-btn.cancel-edit {
+    background: transparent;
+    color: var(--text-muted);
+}
+
+/* Comment Count Badge */
+.comment-count-badge {
+    background: rgba(250, 204, 21, 0.9);
+    color: #11111b;
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+    margin-left: 6px;
+    flex-shrink: 0;
+}
+
 /* --- Selector Error Banner (Streamlit-like) --- */
 .selector-error-banner {
     position: fixed;

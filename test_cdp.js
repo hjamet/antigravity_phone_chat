@@ -34,19 +34,34 @@ async function main() {
     await new Promise(r => ws.on('open', r));
     await callCdp(ws, 'Runtime.enable');
 
-    const SCRIPT = `(() => {
-        const retryBtn = document.querySelector('#antigravity\\\\.agentSidePanelInputBox footer button.bg-ide-button-background');
-        if (retryBtn) {
-            retryBtn.click();
-            return { success: true, method: "raw .click()" };
+    const SCRIPT = `(async () => {
+        function simulateClick(el) {
+            const rect = el.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+            ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type => {
+                el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }));
+            });
         }
-        return { success: false, reason: "button not found" };
+    
+        let toggle = document.querySelector('[data-testid="toggle-aux-sidebar"]');
+        if (toggle) simulateClick(toggle);
+        await new Promise(r => setTimeout(r, 600));
+
+        let rightSidebar = document.querySelector('.bg-sideBar-background');
+        toggle = document.querySelector('[data-testid="toggle-aux-sidebar"]');
+        
+        return {
+            toggleHtml: toggle ? toggle.outerHTML : null,
+            rightSidebarVisible: rightSidebar ? rightSidebar.offsetWidth > 0 : false,
+            rightSidebarInDOM: !!rightSidebar
+        };
     })()`;
 
     const res = await callCdp(ws, 'Runtime.evaluate', {
         expression: SCRIPT, returnByValue: true, awaitPromise: true
     });
-    console.log("Click result: ", JSON.stringify(res.result.value, null, 2));
+    console.log("Real Toggle Details: ", JSON.stringify(res.result.value, null, 2));
     ws.close();
 }
 

@@ -33,7 +33,8 @@ L'application agit comme un proxy intelligent :
 - **Frontend (ES Modules)** : Interface découpée en modules indépendants (`public/js/`) — seuls les 2 derniers messages (user + agent) sont affichés.
 - **Fix New Chat** : Support complet de la page "Nouvelle Conversation" (DOM vide) et envoi de message.
 - **Extraction Intelli** : Capture des blocs tâches, réflexions et messages directes de l'agent.
-- **Artefacts & Commentaires** : Visualisation des artefacts Antigravity avec rendu markdown fidèle. Ajout de **commentaires contextuels rapides** (sélection de texte web instancie via CDP le visualiseur Lexical dans Agent Manager) en plus des boutons d'accès rapide.
+- **Artefacts & Commentaires** : Visualisation des artefacts Antigravity avec rendu markdown fidèle. Ajout de **commentaires contextuels rapides** (sélection de texte → highlight jaune souligné + badge compteur). Cliquer sur un highlight ouvre un popover pour éditer/supprimer. Les commentaires sont injectés en XML au prochain envoi de message. Boutons d'accès rapide aux artefacts.
+- **Injection Message Fiable** : Envoi de messages via CDP avec 3 stratégies d'insertion (single `execCommand`, paste simulation, DOM direct) évitant les troncatures de messages longs.
 - **Smart Scrolling** : Scroll forcé dans l'Agent Manager (CDP). Interface web avec auto-scroll intelligent (seulement si en bas) et notification toast « ✅ Réponse reçue » à la fin du streaming.
 - **Diagnostic Erreur Sélecteur** : En cas de sélecteur cassé, une bannière "Streamlit-like" apparaît sur le web avec un rapport LLM-ready et un snapshot du DOM complet. Arrêt automatique du polling serveur sur erreur.
 - **PWA Installable** : L'application est installable sur Android (et tout navigateur compatible PWA) avec un manifest W3C, un Service Worker et une bannière d'installation personnalisée.
@@ -126,6 +127,7 @@ L'application agit comme un proxy intelligent :
 | 29 | **Fix Selectors Manager** | ✅ Fait | [fix-selectors-manager.md](docs/tasks/fix-selectors-manager.md) |
 | 30 | **Diagnostic Erreur Sélecteur** | ✅ Fait | [cdp-selector-diagnostics.md](docs/tasks/cdp-selector-diagnostics.md) |
 | 31 | **Auto-Retry Agent** | ✅ Fait | — |
+| 32 | **Fix Panneau Artefacts** | ✅ Fait | — |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

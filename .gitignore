@@ -34,6 +34,7 @@ certs/
 
 # Cloudflare Tunnel logs
 cloudflared_log.txt
+cloudflared_config.yml
 
 # Local binaries
 bin/

@@ -101,16 +101,25 @@ def check_cloudflared():
     except (FileNotFoundError, subprocess.CalledProcessError):
         return False
 
-def start_cloudflare_tunnel(tunnel_id):
+def start_cloudflare_tunnel(tunnel_id, config_path=None, token=None):
     """Starts a Cloudflare named tunnel via subprocess.
     
     Args:
         tunnel_id: The Cloudflare tunnel UUID to run.
+        config_path: Optional path to a custom cloudflared config file (provides ingress rules).
+        token: Optional tunnel token for auth (avoids needing local credentials file).
     
     Returns:
         The subprocess.Popen process handle.
     """
-    cmd = ["cloudflared", "tunnel", "run", tunnel_id]
+    cmd = ["cloudflared", "tunnel"]
+    if config_path:
+        cmd.extend(["--config", config_path])
+    cmd.append("run")
+    if token:
+        cmd.extend(["--token", token])
+    else:
+        cmd.append(tunnel_id)
     
     # Redirect cloudflared output to log file
     log_file = open("cloudflared_log.txt", "w")
@@ -217,11 +226,13 @@ def main():
             
             # Read tunnel configuration from .env
             tunnel_id = os.environ.get('CLOUDFLARE_TUNNEL_ID')
+            tunnel_token = os.environ.get('CLOUDFLARE_TUNNEL_TOKEN')
             public_url = os.environ.get('TUNNEL_PUBLIC_URL')
             
-            if not tunnel_id:
-                print("❌ Error: CLOUDFLARE_TUNNEL_ID not set in .env")
+            if not tunnel_id and not tunnel_token:
+                print("❌ Error: CLOUDFLARE_TUNNEL_ID or CLOUDFLARE_TUNNEL_TOKEN not set in .env")
                 print("   Run 'cloudflared tunnel list' to find your tunnel ID.")
+                print("   Run 'cloudflared tunnel token <name>' to get the token.")
                 sys.exit(1)
             
             if not public_url:
@@ -229,9 +240,22 @@ def main():
                 print("   Set this to your tunnel's public domain (e.g., https://your-domain.example.com)")
                 sys.exit(1)
             
-            # Start Cloudflare tunnel
-            print("⏳ Starting Cloudflare Tunnel...")
-            cloudflared_process, cloudflared_log = start_cloudflare_tunnel(tunnel_id)
+            # Use project-local config if available (provides ingress rules without touching global config)
+            config_path = None
+            if os.path.exists("cloudflared_config.yml"):
+                config_path = os.path.abspath("cloudflared_config.yml")
+            
+            mode_info = []
+            if config_path:
+                mode_info.append(f"config: {os.path.basename(config_path)}")
+            if tunnel_token:
+                mode_info.append("token auth")
+            mode_str = f" ({', '.join(mode_info)})" if mode_info else ""
+            print(f"⏳ Starting Cloudflare Tunnel{mode_str}...")
+            
+            cloudflared_process, cloudflared_log = start_cloudflare_tunnel(
+                tunnel_id, config_path=config_path, token=tunnel_token
+            )
             
             # Give cloudflared time to establish connection
             time.sleep(3)

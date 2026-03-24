@@ -86,10 +86,13 @@ if "%ERRORLEVEL%" neq "0" (
     exit /b
 )
 
-:: 7. Launch everything via Python
+:: 7. Launch everything via Python (same window so errors are visible)
 echo [1/1] Launching Antigravity Phone Connect...
 echo (This will start both the server and the Cloudflare tunnel)
-start "" python startup_scripts/launcher.py --mode web
+echo.
+python startup_scripts/launcher.py --mode web
 
-:: 7. Auto-close when done
-exit
+:: If we get here, the launcher exited (crash or Ctrl+C)
+echo.
+echo [INFO] Launcher has stopped.
+pause

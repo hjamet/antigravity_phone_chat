@@ -355,11 +355,11 @@ let _projectLoading = false;
  * Show/hide a "Loading project..." overlay on the input area
  * when the Agent Manager has the "Open editor" button visible (project not yet ready).
  */
-function updateProjectLoadingState(openEditorPresent) {
+function updateProjectLoadingState(isProjectLoading) {
     const inputArea = document.querySelector('.input-area');
     if (!inputArea) return;
 
-    if (openEditorPresent && !_projectLoading) {
+    if (isProjectLoading && !_projectLoading) {
         _projectLoading = true;
         let overlay = document.getElementById('projectLoadingOverlay');
         if (!overlay) {
@@ -370,7 +370,7 @@ function updateProjectLoadingState(openEditorPresent) {
             inputArea.style.position = 'relative';
             inputArea.appendChild(overlay);
         }
-    } else if (!openEditorPresent && _projectLoading) {
+    } else if (!isProjectLoading && _projectLoading) {
         _projectLoading = false;
         const overlay = document.getElementById('projectLoadingOverlay');
         if (overlay) overlay.remove();
@@ -391,7 +391,7 @@ async function pollChatState() {
             renderChatState(data);
 
             // --- Project Loading Gate ---
-            updateProjectLoadingState(data.openEditorPresent);
+            updateProjectLoadingState(data.isProjectLoading);
 
             if (!data.isStreaming) {
                 window.dispatchEvent(new Event('agent-stopped-streaming'));
@@ -600,6 +600,9 @@ async function init() {
         if (elements.chatContent) {
             elements.chatContent.querySelectorAll('.chat-msg').forEach(el => el.remove());
         }
+        // Force the loading overlay immediately for better DX
+        updateProjectLoadingState(true);
+        
         // Reset polling cache so the next poll triggers a full re-render
         _lastPollJson = '';
         _wasConversationFinished = false;

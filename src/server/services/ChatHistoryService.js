@@ -10,7 +10,9 @@ export class ChatHistoryService {
         this.lastRawVisibleMessages = '';
         this.staleLockExpiry = 0;
         this.availableArtifacts = [];
-        this.openEditorPresent = false;
+        this.isProjectLoading = false;
+        this.hasSeenOpenEditor = false;
+        this.projectLoadTimeout = 0;
     }
 
     /**
@@ -28,8 +30,13 @@ export class ChatHistoryService {
         this.conversationFinished = false;
         this.scrollInfo = null;
         this.availableArtifacts = [];
-        this.openEditorPresent = false;
-        console.log(`🔄 ChatHistoryService reset — ignoring stale DOM for up to 5s`);
+        
+        // --- Project Loading Gate ---
+        this.isProjectLoading = true;
+        this.hasSeenOpenEditor = false;
+        this.projectLoadTimeout = Date.now() + 15000; // max lock 15s
+        
+        console.log(`🔄 ChatHistoryService reset — ignorer le vieux DOM et verrouiller l'UI`);
     }
 
     /**
@@ -94,7 +101,27 @@ export class ChatHistoryService {
         if (validSnapshot.availableArtifacts !== undefined) {
             this.availableArtifacts = validSnapshot.availableArtifacts;
         }
-        this.openEditorPresent = validSnapshot.openEditorPresent || false;
+
+        // --- LOADING GATE LOGIC ---
+        if (this.isProjectLoading) {
+            if (Date.now() > this.projectLoadTimeout) {
+                console.log('⚠️ [Loading Gate] Timeout 15s atteint. Déverrouillage.');
+                this.isProjectLoading = false;
+            } else if (validSnapshot.openEditorPresent) {
+                this.hasSeenOpenEditor = true;
+                // Tant qu'il est là, on attend qu'il soit cliqué...
+            } else if (this.hasSeenOpenEditor && !validSnapshot.openEditorPresent) {
+                // Vu puis disparu (cliqué par manager.js) = C'est prêt !
+                console.log('✅ [Loading Gate] Open Editor cliqué. Déverrouillage.');
+                this.isProjectLoading = false;
+            } else if (!this.hasSeenOpenEditor && (validSnapshot.messages || []).length > 0) {
+                // S'il y a déjà des messages et qu'on a toujours pas vu le bouton, c'est que l'éditeur est peut-être déjà ouvert.
+                // On laisse encore un peu de temps au polling pour trouver le bouton (max 4s) car le temps de réaction DOm peut varier,
+                if (Date.now() > this.staleLockExpiry) {
+                     this.isProjectLoading = false;
+                }
+            }
+        }
 
         for (const msg of (validSnapshot.messages || [])) {
             if (msg.type === 'taskBlock') {
@@ -207,7 +234,7 @@ export class ChatHistoryService {
             isFull: false,
             isStreaming: this.isStreaming,
             conversationFinished: this.conversationFinished,
-            openEditorPresent: this.openEditorPresent,
+            isProjectLoading: this.isProjectLoading,
             scrollInfo: this.scrollInfo
         };
     }
@@ -289,7 +316,7 @@ export class ChatHistoryService {
             // State flags
             isStreaming: this.isStreaming,
             conversationFinished: this.conversationFinished,
-            openEditorPresent: this.openEditorPresent,
+            isProjectLoading: this.isProjectLoading,
             messageCount: this.chatTimeline.length,
             
             // Full ordered message list

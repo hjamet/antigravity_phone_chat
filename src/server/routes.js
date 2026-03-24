@@ -282,6 +282,7 @@ export function setupRoutes(app, {
 
     router.post('/api/projects/open', async (req, res) => {
         const { index, name } = req.body;
+        chatHistoryService.reset();
         const result = await managerCdp.openProject(cdpConnections.manager, { index, name });
         if (result) {
             res.json({ success: true, message: 'Opening project...' });

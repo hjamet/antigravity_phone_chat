@@ -222,24 +222,36 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
             // Extract available artifacts from sidebar (if visible)
             let availableArtifacts = [];
             let artHeader = null;
+            let isSidebarOpen = false;
+            
             try {
-                artHeader = Array.from(document.querySelectorAll(SEL.artifacts.sectionHeader))
-                    .find(el => (el.innerText || '').trim() === 'Artifacts' && el.offsetParent !== null);
-                if (artHeader) {
-                    const container = artHeader.closest('.flex.flex-col') || artHeader.parentElement?.parentElement;
-                    if (container) {
-                        const ul = container.querySelector('ul');
-                        if (ul) {
-                            availableArtifacts = Array.from(ul.querySelectorAll('li'))
-                                .filter(li => li.offsetParent !== null && (li.innerText || '').trim().length > 1)
-                                .map(li => (li.innerText || '').trim());
+                // DÉTECTION NO-FALLBACK DE LA SIDEBAR : Utilise un sélecteur CSS unique et strict.
+                const auxSidebar = document.querySelector(SEL.artifacts.sidebarPanel);
+                if (auxSidebar && auxSidebar.offsetWidth > 0) {
+                    isSidebarOpen = true;
+                }
+
+                // Extraction des artefacts existants SEULEMENT SI le panneau est visible
+                if (isSidebarOpen) {
+                    artHeader = Array.from(document.querySelectorAll(SEL.artifacts.sectionHeader))
+                        .find(el => (el.textContent || '').trim().toLowerCase() === 'artifacts' && el.getBoundingClientRect().width > 0);
+                        
+                    if (artHeader) {
+                        const container = artHeader.closest('.flex.flex-col') || artHeader.parentElement?.parentElement;
+                        if (container) {
+                            const ul = container.querySelector('ul');
+                            if (ul) {
+                                availableArtifacts = Array.from(ul.querySelectorAll('li'))
+                                    .filter(li => li.offsetParent !== null && (li.innerText || '').trim().length > 1)
+                                    .map(li => (li.innerText || '').trim());
+                            }
                         }
                     }
                 }
             } catch(e) { /* sidebar not open, ignore */ }
 
             // Auto-open sidebar if chat is active but artifacts panel not found
-            if (!artHeader && chatScroll) {
+            if (!isSidebarOpen && chatScroll) {
                 try {
                     const toggleBtn = document.querySelector(SEL.artifacts.toggleSidebar);
                     if (toggleBtn && toggleBtn.offsetParent !== null) {

@@ -94,7 +94,7 @@ export const SELECTORS = {
     // ---- Artifacts / Changes Panel ----
     artifacts: {
         toggleSidebar: '[data-testid="toggle-aux-sidebar"]',                      // Button to open/close the aux sidebar
-        sidebarPanel: '.bg-sideBar-background',                                   // Aux sidebar container
+        sidebarPanel: '.bg-sideBar-background.transition-all',                    // Strict unique selector for Aux sidebar container
         sectionHeader: '.text-xs.opacity-50',                                     // Section header ("Artifacts", "Files Changed")
         artifactSectionParent: '.flex.flex-col.w-full',                           // Parent of the Artifacts section
         viewerPanel: '.flex.w-full.h-full.outline-none.flex-col',                 // Artifact viewer panel (2 children: header + content)

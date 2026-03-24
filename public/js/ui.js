@@ -450,12 +450,22 @@ export function updateStateUI(state) {
     }
     const headerTitle = document.getElementById('headerTitle');
     if (headerTitle) {
-        if (state.workspace && state.chatTitle) {
-            headerTitle.textContent = `${state.workspace} - ${state.chatTitle}`;
-        } else if (state.workspace) {
+        if (state.workspace) {
             headerTitle.textContent = state.workspace;
         } else {
             headerTitle.textContent = 'Antigravity Connect';
+        }
+    }
+
+    const chatTitleChip = document.getElementById('chatTitleChip');
+    const chatTitleText = document.getElementById('chatTitleText');
+    if (chatTitleChip && chatTitleText) {
+        if (state.chatTitle) {
+            chatTitleText.textContent = state.chatTitle;
+            chatTitleChip.style.display = 'flex';
+        } else {
+            chatTitleChip.style.display = 'none';
+            chatTitleText.textContent = '';
         }
     }
 }

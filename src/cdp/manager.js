@@ -273,6 +273,26 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                 }
             } catch(e) { /* sidebar may not be visible */ }
 
+            // --- Auto-Allow MCP Logic ---
+            let mcpAllowDetected = false;
+            const mcpAllowBtn = document.querySelector(SEL.mcp.allowButton);
+            if (mcpAllowBtn) {
+                mcpAllowDetected = true;
+                if (!window.__antigravityMcpAllowPending) {
+                    window.__antigravityMcpAllowPending = true;
+                    const delay = Math.floor(Math.random() * 500) + 200; // Small delay
+                    console.log(\`[CDP] MCP permission requested. Auto-clicking Allow in \${delay}ms...\`);
+                    setTimeout(() => {
+                        window.__antigravityMcpAllowPending = false;
+                        const freshBtn = document.querySelector(SEL.mcp.allowButton);
+                        if (freshBtn) {
+                            freshBtn.click();
+                            console.log('[CDP] Auto-clicked MCP Allow button.');
+                        }
+                    }, delay);
+                }
+            }
+
             // --- Auto-Retry Logic ---
             let retryDetected = false;
             const retryBtn = document.querySelector(SEL.controls.retryButton);

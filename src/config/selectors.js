@@ -107,4 +107,9 @@ export const SELECTORS = {
         reviewButton: 'button[aria-haspopup="dialog"]',                           // "Review" button (opens comment dialog)
         commentEditor: '[contenteditable="true"][class*="bg-gray-500"]',          // Comment text editor
     },
+
+    // ---- MCP Permission prompts ----
+    mcp: {
+        allowButton: '.my-1.flex.w-full.flex-wrap.items-center.justify-between .ml-auto.flex.flex-row.gap-x-2.gap-y-2 button.bg-ide-button-background:last-child' // Bonton "Allow This Conversation"
+    }
 };

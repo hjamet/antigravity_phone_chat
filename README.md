@@ -55,6 +55,7 @@ L'application agit comme un proxy intelligent :
 | Screenshot Agent Manager | ✅ Nouveau | CDP Page.captureScreenshot |
 | Indicateur Non Lu (Historique) | ✅ Nouveau | LocalStorage Frontend |
 | Vide Chat sur Sélection Projet | ✅ Stable | Frontend |
+| Auto-Allow MCP Permissions | ✅ Nouveau | Agent Manager CDP |
 
 ## 6. # Documentation Index
 | Titre (Lien) | Description |
@@ -147,6 +148,7 @@ L'application agit comme un proxy intelligent :
 | 45 | **Fix Autoplay Mobile TTS** | ✅ Fait | [mobile-tts-autoplay-fix.md](docs/tasks/mobile-tts-autoplay-fix.md) |
 | 46 | **Fix Double Envoi Messages** | ✅ Fait | — |
 | 47 | **Vide Chat sur Sélection Projet** | ✅ Fait | — |
+| 48 | **Auto-Allow MCP Permissions** | ✅ Fait | — |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

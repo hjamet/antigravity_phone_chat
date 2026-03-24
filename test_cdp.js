@@ -35,27 +35,13 @@ async function main() {
     await callCdp(ws, 'Runtime.enable');
 
     const SCRIPT = `(async () => {
-        function simulateClick(el) {
-            const rect = el.getBoundingClientRect();
-            const x = rect.left + rect.width / 2;
-            const y = rect.top + rect.height / 2;
-            ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(type => {
-                el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }));
-            });
-        }
-    
-        let toggle = document.querySelector('[data-testid="toggle-aux-sidebar"]');
-        if (toggle) simulateClick(toggle);
-        await new Promise(r => setTimeout(r, 600));
-
-        let rightSidebar = document.querySelector('.bg-sideBar-background');
-        toggle = document.querySelector('[data-testid="toggle-aux-sidebar"]');
+        const sel = '.my-1.flex.w-full.flex-wrap.items-center.justify-between .ml-auto.flex.flex-row.gap-x-2.gap-y-2 button.bg-ide-button-background:last-child';
+        const buttons = Array.from(document.querySelectorAll(sel));
         
-        return {
-            toggleHtml: toggle ? toggle.outerHTML : null,
-            rightSidebarVisible: rightSidebar ? rightSidebar.offsetWidth > 0 : false,
-            rightSidebarInDOM: !!rightSidebar
-        };
+        return buttons.map(b => ({
+            text: b.innerText,
+            html: b.outerHTML.substring(0, 150)
+        }));
     })()`;
 
     const res = await callCdp(ws, 'Runtime.evaluate', {

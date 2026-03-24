@@ -35,13 +35,13 @@ async function main() {
     await callCdp(ws, 'Runtime.enable');
 
     const SCRIPT = `(async () => {
-        const sel = '.my-1.flex.w-full.flex-wrap.items-center.justify-between .ml-auto.flex.flex-row.gap-x-2.gap-y-2 button.bg-ide-button-background:last-child';
+        const sel = 'div.flex.justify-start.mt-2.px-1 button.p-1.rounded.transition-colors.flex.items-center.gap-1';
         const buttons = Array.from(document.querySelectorAll(sel));
-        
-        return buttons.map(b => ({
-            text: b.innerText,
-            html: b.outerHTML.substring(0, 150)
-        }));
+        return {
+            count: buttons.length,
+            htmls: buttons.map(b => b.outerHTML.substring(0, 150)),
+            texts: buttons.map(b => b.innerText.trim())
+        };
     })()`;
 
     const res = await callCdp(ws, 'Runtime.evaluate', {

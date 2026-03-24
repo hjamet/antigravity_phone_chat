@@ -293,6 +293,25 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                 }
             }
 
+            // --- Auto-Open Editor Logic ---
+            let openEditorPresent = false;
+            const openEditorBtn = document.querySelector(SEL.controls.openEditorButton);
+            if (openEditorBtn && openEditorBtn.offsetParent !== null) {
+                openEditorPresent = true;
+                if (!window.__antigravityOpenEditorPending) {
+                    window.__antigravityOpenEditorPending = true;
+                    console.log('[CDP] Open editor button detected. Auto-clicking...');
+                    setTimeout(() => {
+                        window.__antigravityOpenEditorPending = false;
+                        const freshBtn = document.querySelector(SEL.controls.openEditorButton);
+                        if (freshBtn && freshBtn.offsetParent !== null) {
+                            freshBtn.click();
+                            console.log('[CDP] Auto-clicked Open editor button.');
+                        }
+                    }, 300);
+                }
+            }
+
             // --- Auto-Retry Logic ---
             let retryDetected = false;
             const retryBtn = document.querySelector(SEL.controls.retryButton);
@@ -306,7 +325,7 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                     const delay = Math.floor(Math.random() * 2000);
                     console.log(\`[CDP] Error detected. Auto-clicking Retry in \${delay}ms...\`);
                     setTimeout(() => {
-                        window.__antigravityRetryPending = false; // Reset flag so it can retry again if it fails
+                        window.__antigravityRetryPending = false;
                         const freshBtn = document.querySelector(SEL.controls.retryButton);
                         if (freshBtn) {
                             freshBtn.click();
@@ -323,6 +342,7 @@ export async function captureSnapshot(cdp, options = { fullScroll: false }) {
                 isFull: false, 
                 isStreaming,
                 conversationFinished,
+                openEditorPresent,
                 availableArtifacts, 
                 retryInfo: { detected: retryDetected },
                 scrollInfo: { scrollTop: chatScroll.scrollTop, scrollHeight, clientHeight } 
@@ -414,6 +434,8 @@ export async function injectMessage(cdp, text) {
             const editor = inputBox.querySelector(SEL.controls.editor);
             if (!editor) throw new Error('[CDP] Selector broken: "' + SEL.controls.editor + '" — not found in injectMessage()');
             if(typeof lastValidRoot !== 'undefined') lastValidRoot = editor;
+
+
 
             const textToInsert = ${safeText};
 

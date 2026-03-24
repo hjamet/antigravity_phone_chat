@@ -39,6 +39,7 @@ L'application agit comme un proxy intelligent :
 - **Diagnostic Erreur Sélecteur** : Philosophie "Fail-Fast / No-Fallback". Lors d'un sélecteur CDP cassé (ex: `triggerPicker`), une bannière d'erreur apparaît sur l'UI avec le DOM et un prompt prêt pour le LLM. **Nouveauté** : L'erreur d'une action utilisateur ne bloque plus le polling global ; seules les erreurs critiques sur l'extracteur racine (`captureSnapshot`) mettent l'application en pause pour éviter le spam.
 - **PWA Installable** : L'application est installable sur Android (et tout navigateur compatible PWA) avec un manifest W3C, un Service Worker et une bannière d'installation personnalisée.
 - **Auto-Retry Agent** : Détection automatique des erreurs "Agent terminated due to error" et clic sur le bouton "Retry" après un délai aléatoire (0-2s) pour une reprise fluide sans intervention manuelle.
+- **Auto-Open Editor & Loading Gate** : Détection automatique du bouton "Open editor" à l'ouverture d'un nouveau projet. Le serveur clique automatiquement dessus via CDP. Côté mobile, un overlay "Loading project..." bloque l'envoi de messages tant que le projet n'est pas prêt.
 
 ## 5. # Principaux résultats
 | Feature | État | Source de vérité |
@@ -56,6 +57,7 @@ L'application agit comme un proxy intelligent :
 | Indicateur Non Lu (Historique) | ✅ Nouveau | LocalStorage Frontend |
 | Vide Chat sur Sélection Projet | ✅ Stable | Frontend |
 | Auto-Allow MCP Permissions | ✅ Nouveau | Agent Manager CDP |
+| Auto-Open Editor | ✅ Nouveau | Agent Manager CDP |
 
 ## 6. # Documentation Index
 | Titre (Lien) | Description |
@@ -149,6 +151,7 @@ L'application agit comme un proxy intelligent :
 | 46 | **Fix Double Envoi Messages** | ✅ Fait | — |
 | 47 | **Vide Chat sur Sélection Projet** | ✅ Fait | — |
 | 48 | **Auto-Allow MCP Permissions** | ✅ Fait | — |
+| 49 | **Auto-Open Editor** | ✅ Fait | — |
 | 🔮 | Transcription Vocale | 💤 Futur | [voice-transcription.md](docs/tasks/voice-transcription.md) |
 
 ---

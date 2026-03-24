@@ -349,6 +349,34 @@ function showCompletionToast() {
     }, 6000);
 }
 
+let _projectLoading = false;
+
+/**
+ * Show/hide a "Loading project..." overlay on the input area
+ * when the Agent Manager has the "Open editor" button visible (project not yet ready).
+ */
+function updateProjectLoadingState(openEditorPresent) {
+    const inputArea = document.querySelector('.input-area');
+    if (!inputArea) return;
+
+    if (openEditorPresent && !_projectLoading) {
+        _projectLoading = true;
+        let overlay = document.getElementById('projectLoadingOverlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'projectLoadingOverlay';
+            overlay.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(30,30,46,0.85);z-index:100;border-radius:12px;backdrop-filter:blur(4px);pointer-events:all;';
+            overlay.innerHTML = '<div style="display:flex;align-items:center;gap:10px;color:#cdd6f4;font-size:14px;font-weight:500;"><div class="loading-spinner" style="width:20px;height:20px;border:2px solid rgba(137,180,250,0.3);border-top-color:#89b4fa;border-radius:50%;animation:spin 0.8s linear infinite;"></div>Loading project...</div>';
+            inputArea.style.position = 'relative';
+            inputArea.appendChild(overlay);
+        }
+    } else if (!openEditorPresent && _projectLoading) {
+        _projectLoading = false;
+        const overlay = document.getElementById('projectLoadingOverlay');
+        if (overlay) overlay.remove();
+    }
+}
+
 async function pollChatState() {
     try {
         const res = await fetchWithAuth(`/api/chat-state?t=${Date.now()}`);
@@ -361,6 +389,10 @@ async function pollChatState() {
         const data = JSON.parse(text);
         if (data && !data.error) {
             renderChatState(data);
+
+            // --- Project Loading Gate ---
+            updateProjectLoadingState(data.openEditorPresent);
+
             if (!data.isStreaming) {
                 window.dispatchEvent(new Event('agent-stopped-streaming'));
             }
@@ -482,7 +514,7 @@ async function init() {
         if ("Notification" in window && Notification.permission === "default") {
             Notification.requestPermission();
         }
-        if (_sendGuard) return;
+        if (_sendGuard || _projectLoading) return;
         if (window.isAgentStreaming) {
             import('./chat.js?v=10').then(m => m.stopGeneration());
             return;

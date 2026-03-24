@@ -42,6 +42,7 @@ export const snapshotSchema = z.object({
     isFull: z.boolean().optional(),
     isStreaming: z.boolean().optional(),
     conversationFinished: z.boolean().optional(),
+    openEditorPresent: z.boolean().optional(),
     availableArtifacts: z.array(z.string()).optional(),
     scrollInfo: z.any().optional()
 });

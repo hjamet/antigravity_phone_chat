@@ -10,6 +10,7 @@ export class ChatHistoryService {
         this.lastRawVisibleMessages = '';
         this.staleLockExpiry = 0;
         this.availableArtifacts = [];
+        this.openEditorPresent = false;
     }
 
     /**
@@ -27,6 +28,7 @@ export class ChatHistoryService {
         this.conversationFinished = false;
         this.scrollInfo = null;
         this.availableArtifacts = [];
+        this.openEditorPresent = false;
         console.log(`🔄 ChatHistoryService reset — ignoring stale DOM for up to 5s`);
     }
 
@@ -92,6 +94,7 @@ export class ChatHistoryService {
         if (validSnapshot.availableArtifacts !== undefined) {
             this.availableArtifacts = validSnapshot.availableArtifacts;
         }
+        this.openEditorPresent = validSnapshot.openEditorPresent || false;
 
         for (const msg of (validSnapshot.messages || [])) {
             if (msg.type === 'taskBlock') {
@@ -204,6 +207,7 @@ export class ChatHistoryService {
             isFull: false,
             isStreaming: this.isStreaming,
             conversationFinished: this.conversationFinished,
+            openEditorPresent: this.openEditorPresent,
             scrollInfo: this.scrollInfo
         };
     }
@@ -285,6 +289,7 @@ export class ChatHistoryService {
             // State flags
             isStreaming: this.isStreaming,
             conversationFinished: this.conversationFinished,
+            openEditorPresent: this.openEditorPresent,
             messageCount: this.chatTimeline.length,
             
             // Full ordered message list

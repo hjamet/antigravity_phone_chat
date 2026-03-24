@@ -35,6 +35,7 @@ export const SELECTORS = {
 
     // ---- Control elements (input area below chat) ----
     controls: {
+        openEditorButton: 'div.flex.justify-start.mt-2.px-1 button.p-1.rounded.transition-colors.flex.items-center.gap-1', // Bouton "Open editor"
         inputBox: '#antigravity\\.agentSidePanelInputBox',
         editor: '[contenteditable="true"][role="textbox"]',
         controlsRow: '.mt-1.flex.w-full.items-center.justify-between',           // Row holding mode/model buttons
